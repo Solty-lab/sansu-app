@@ -392,6 +392,175 @@ function divFrames(aS, bS) {
   return longDivFrames(dividendS, divisor, intro);
 }
 
+// ===== 図: 数直線・面積図・二本の数直線・テープ図・表・式の木 =====
+// どの解説にも、構造が目で見える図を1つ以上つける。色は CSS のクラスで決める (ダークモード対応)
+const r1 = (v) => Math.round(v * 10) / 10;
+function svgText(x, y, s, cls = '', anchor = 'middle') { return `<text x="${r1(x)}" y="${r1(y)}" text-anchor="${anchor}"${cls ? ` class="${cls}"` : ''}>${esc(s)}</text>`; }
+function svgBox(w, h, body, label) { return `<svg class="figsvg" viewBox="0 0 ${w} ${h}" style="max-width:${w}px" role="img" aria-label="${esc(label)}">${body}</svg>`; }
+// 数の表示 (分数は 2/3、小数はそのまま)
+function fv(v) { const f = Fr.of(v); return f.isInt() ? String(f.n) : f.terminating() ? f.toDec() : frText(f, false); }
+function niceStep(range, target) { const raw = range / target; const p = 10 ** Math.floor(Math.log10(raw)); const m = raw / p; return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 5 ? 5 : 10) * p; }
+// 弧の矢印 (xa → xb)。up=true なら線の上、false なら下
+function arcArrow(xa, xb, y, h, cls = 'ac', up = true) {
+  const s = up ? -1 : 1; const xm = (xa + xb) / 2; const yc = y + s * 2 * h;
+  let p = `<path class="${cls}" d="M${r1(xa)} ${r1(y)} Q${r1(xm)} ${r1(yc)} ${r1(xb)} ${r1(y)}"/>`;
+  const dx = xb - xm, dy = y - yc, L = Math.hypot(dx, dy) || 1, ux = dx / L, uy = dy / L;
+  for (const a of [0.45, -0.45]) {
+    const bx = -(ux * Math.cos(a) - uy * Math.sin(a)) * 8, by = -(ux * Math.sin(a) + uy * Math.cos(a)) * 8;
+    p += `<path class="${cls}" d="M${r1(xb)} ${r1(y)} l${r1(bx)} ${r1(by)}"/>`;
+  }
+  return p;
+}
+// 数直線: marks = [{v, s, cls}] 目盛りと数, jumps = [{a, b, s}] 弧の矢印
+function figNumberLine(o) {
+  const W = 540, x0 = 34, x1 = W - 34;
+  const jumps = o.jumps || [];
+  const X = (v) => x0 + (x1 - x0) * (v - o.min) / (o.max - o.min);
+  const hs = jumps.map((j, i) => { const w = Math.abs(X(j.b) - X(j.a)); return Math.min(70, Math.max(18, w * 0.35)) + (w < 70 && i % 2 ? 26 : 0); });
+  const base = jumps.length ? Math.max(...hs) + 34 : 28;
+  let b = `<line class="ln" x1="${x0 - 12}" y1="${base}" x2="${x1 + 16}" y2="${base}"/><path class="ln" d="M${x1 + 9} ${base - 5} L${x1 + 16} ${base} L${x1 + 9} ${base + 5}"/>`;
+  const step = niceStep(o.max - o.min, 20);
+  for (let k = Math.ceil(o.min / step - 1e-9); k * step <= o.max + 1e-9; k++) { const x = X(k * step); b += `<line class="ln2" x1="${r1(x)}" y1="${base - 4}" x2="${r1(x)}" y2="${base + 4}"/>`; }
+  const marks = (o.marks || []).slice().sort((p, q) => p.v - q.v);
+  let last = [-1e9, -1e9]; let rows = 1;
+  marks.forEach((m) => {
+    const x = X(m.v); const w = String(m.s).length * 8 + 10;
+    const row = x - last[0] >= w ? 0 : x - last[1] >= w ? 1 : 0;
+    last[row] = x; rows = Math.max(rows, row + 1);
+    b += `<line class="${m.cls === 'm' ? 'ac' : 'ln'}" x1="${r1(x)}" y1="${base - 8}" x2="${r1(x)}" y2="${base + 8 + row * 20}"/>` + svgText(x, base + 24 + row * 20, m.s, m.cls || '');
+  });
+  jumps.forEach((j, i) => {
+    const xa = X(j.a), xb = X(j.b);
+    b += arcArrow(xa, xb, base - 2, hs[i], 'ac', true) + svgText((xa + xb) / 2, base - 2 - hs[i] - 6, j.s, 'm');
+  });
+  if (o.unit) b += svgText(x1 + 16, base + 24, o.unit, 's', 'end');
+  return svgBox(W, base + 34 + rows * 20, b, o.label || '数直線');
+}
+// 面積図: たて rows × よこ cols の長方形を分ける。cells[r][c] = {s, cls}
+function figArea(o) {
+  const W = 540, x0 = 96, TW = 400, y0 = 40;
+  const TH = o.rows.length > 1 ? 170 : 96;
+  const norm = (arr, key, min) => { const sum = arr.reduce((a, x) => a + Math.abs(x[key] || 1), 0); let w = arr.map((x) => Math.max(Math.abs(x[key] || 1) / sum, min)); const s2 = w.reduce((a, b) => a + b, 0); return w.map((x) => x / s2); };
+  const ws = norm(o.cols, 'w', Math.min(0.2, 0.9 / o.cols.length)), hs = norm(o.rows, 'h', Math.min(0.28, 0.9 / o.rows.length));
+  let b = ''; let x = x0;
+  const xs = ws.map((w) => { const a = x; x += w * TW; return [a, w * TW]; });
+  let y = y0;
+  const ys = hs.map((h) => { const a = y; y += h * TH; return [a, h * TH]; });
+  ys.forEach(([yy, hh], r) => xs.forEach(([xx, ww], c) => {
+    const cell = (o.cells[r] || [])[c] || { s: '' };
+    b += `<rect class="${cell.cls || 'bx'}" x="${r1(xx)}" y="${r1(yy)}" width="${r1(ww)}" height="${r1(hh)}"/>` + svgText(xx + ww / 2, yy + hh / 2 + 5, cell.s, 'b');
+  }));
+  xs.forEach(([xx, ww], c) => { b += svgText(xx + ww / 2, y0 - 10, o.cols[c].s, o.cols[c].cls || ''); });
+  ys.forEach(([yy, hh], r) => { b += svgText(x0 - 10, yy + hh / 2 + 5, o.rows[r].s, o.rows[r].cls || '', 'end'); });
+  if (o.topNote) b += svgText(x0 + TW, 14, o.topNote, 's', 'end');
+  if (o.leftNote) b += svgText(8, y0 + TH + 22, o.leftNote, 's', 'start');
+  return svgBox(W, y0 + TH + (o.leftNote ? 30 : 12), b, o.label || '面積図');
+}
+// 二本の数直線: cols = [{pos, t, b, ut, ub}] (ut/ub: その数が □)。arrows = [{from, to, s, side}]
+function figDoubleLine(o) {
+  const W = 540, x0 = 104, x1 = W - 52, yT = 84, yB = 144;
+  const cols = o.cols.slice().sort((p, q) => p.pos - q.pos);
+  const max = Math.max(...cols.map((c) => c.pos)) || 1;
+  let px = cols.map((c) => c.pos / max);
+  for (let i = 1; i < px.length; i++) if (px[i] - px[i - 1] < 0.16) { px = cols.map((c, k) => k / (cols.length - 1)); break; }
+  const X = (i) => x0 + (x1 - x0) * px[i];
+  let b = `<line class="ln" x1="${x0}" y1="${yT}" x2="${x1 + 8}" y2="${yT}"/><line class="ln" x1="${x0}" y1="${yB}" x2="${x1 + 8}" y2="${yB}"/>`;
+  b += svgText(10, yT + 5, o.top, 's', 'start') + svgText(10, yB + 5, o.bot, 's', 'start');
+  cols.forEach((c, i) => {
+    const x = X(i);
+    b += `<line class="ln" x1="${r1(x)}" y1="${yT - 6}" x2="${r1(x)}" y2="${yT + 6}"/><line class="ln" x1="${r1(x)}" y1="${yB - 6}" x2="${r1(x)}" y2="${yB + 6}"/><line class="dash" x1="${r1(x)}" y1="${yT + 8}" x2="${r1(x)}" y2="${yB - 8}"/>`;
+    b += svgText(x, yT - 12, c.ut ? '□' : c.t, c.ut ? 'm big' : 'b') + svgText(x, yB + 24, c.ub ? '□' : c.b, c.ub ? 'm big' : 'b');
+  });
+  const idx = (pos) => cols.findIndex((c) => c.pos === pos);
+  (o.arrows || []).forEach((a) => {
+    const i = idx(a.from), j = idx(a.to); if (i < 0 || j < 0) return;
+    const up = a.side !== 'bot'; const y = up ? yT - 30 : yB + 32; const h = 14;
+    b += arcArrow(X(i), X(j), y, h, 'ac', up) + svgText((X(i) + X(j)) / 2, up ? y - h - 6 : y + h + 16, a.s, 'm');
+  });
+  return svgBox(W, yB + 70, b, o.label || '二本の数直線');
+}
+// テープ図 (分数): rows = [{f, d, s, cls}] f を、1 を d こに分けた目もりで表す
+function figFracBars(rows) {
+  const W = 540, x0 = 128, maxW = Math.max(1, ...rows.map((r) => Math.ceil(r.f.val() - 1e-9)));
+  const U = 380 / maxW; const RH = 24, G = 16;
+  let b = ''; let y = 14;
+  rows.forEach((r) => {
+    const whole = Math.max(1, Math.ceil(r.f.val() - 1e-9)); const n = Math.round(r.f.val() * r.d);
+    for (let i = 0; i < n; i++) b += `<rect class="${r.cls || 'sh'}" x="${r1(x0 + i * U / r.d)}" y="${y}" width="${r1(U / r.d)}" height="${RH}"/>`;
+    if (U / r.d >= 5) for (let i = 1; i < whole * r.d; i++) if (i % r.d) b += `<line class="ln2" x1="${r1(x0 + i * U / r.d)}" y1="${y}" x2="${r1(x0 + i * U / r.d)}" y2="${y + RH}"/>`;
+    for (let w = 0; w < whole; w++) b += `<rect class="frame" x="${r1(x0 + w * U)}" y="${y}" width="${r1(U)}" height="${RH}"/>`;
+    b += svgText(x0 - 10, y + RH / 2 + 5, r.s, r.lcls || '', 'end');
+    y += RH + G;
+  });
+  for (let w = 0; w <= maxW; w++) b += svgText(x0 + w * U, y + 4, String(w), 's');
+  return svgBox(W, y + 14, b, 'テープ図');
+}
+// 分数のかけ算の面積図: 1 の正方形を たて a.d、よこ b.d に分ける
+function figFracArea(a, b) {
+  const S = 200, x0 = 190, y0 = 34;
+  let s = '';
+  for (let r = 0; r < a.d; r++) for (let c = 0; c < b.d; c++) {
+    const inA = r < a.n, inB = c < b.n;
+    s += `<rect class="${inA && inB ? 'both' : inA ? 'sh' : inB ? 'sh3' : 'bx'}" x="${r1(x0 + c * S / b.d)}" y="${r1(y0 + r * S / a.d)}" width="${r1(S / b.d)}" height="${r1(S / a.d)}"/>`;
+  }
+  s += `<rect class="frame" x="${x0}" y="${y0}" width="${S}" height="${S}"/>`;
+  s += svgText(x0 + S / 2, y0 - 12, `よこ: ${b.n}/${b.d}`, 'b') + svgText(x0 - 12, y0 + S / 2 + 5, `たて: ${a.n}/${a.d}`, 'b', 'end');
+  s += svgText(x0 + S + 14, y0 + 16, '1 m²', 's', 'start');
+  return svgBox(540, y0 + S + 16, s, '分数のかけ算の面積図');
+}
+// 横の棒グラフ: items = [{s, v, label}]
+function figBars(items, unit = '') {
+  const W = 540, x0 = 90, TW = 320; const max = Math.max(...items.map((x) => x.v)) || 1;
+  let b = ''; let y = 12;
+  items.forEach((it) => { const w = TW * it.v / max; b += `<rect class="${it.cls || 'sh'}" x="${x0}" y="${y}" width="${r1(w)}" height="26"/>` + svgText(x0 - 10, y + 18, it.s, 'b', 'end') + svgText(x0 + w + 8, y + 18, it.label + unit, '', 'start'); y += 40; });
+  return svgBox(W, y, b, '棒グラフ');
+}
+// 表 (マトリクス)
+function figTable(head, rows, o = {}) {
+  let h = `<table class="pv mx">`;
+  if (head && head.length) h += `<tr>${head.map((x, i) => `<th${o.hlCol === i ? ' class="hlc"' : ''}>${x}</th>`).join('')}</tr>`;
+  rows.forEach((r, ri2) => { h += `<tr${o.sumRow === ri2 ? ' class="sum"' : ''}>${r.map((x, i) => (i === 0 && o.rowHead !== false ? `<th>${x}</th>` : `<td${(o.hlCells || []).some(([a, c]) => a === ri2 && c === i) ? ' class="carry"' : ''}>${x}</td>`)).join('')}</tr>`; });
+  return h + '</table>';
+}
+// 式の木: 数を上に、計算 (○) を下に。hl の計算が次にすること
+function figTree(tree, hl, leafText) {
+  const leaves = []; const ht = (n) => (n.leaf ? 0 : 1 + Math.max(ht(n.l), ht(n.r)));
+  const H = ht(tree);
+  const pos = new Map();
+  const lay = (n) => {
+    if (n.leaf) { const x = 50 + leaves.length * 92; leaves.push(n); pos.set(n, [x, 26]); return x; }
+    const xl = lay(n.l), xr = lay(n.r); const x = (xl + xr) / 2; pos.set(n, [x, 26 + ht(n) * 62]); return x;
+  };
+  lay(tree);
+  const W = Math.max(540, 50 + leaves.length * 92);
+  let b = '';
+  const draw = (n) => {
+    if (n.leaf) return;
+    const [x, y] = pos.get(n);
+    for (const c of [n.l, n.r]) { const [cx, cy] = pos.get(c); b += `<line class="ln2" x1="${r1(cx)}" y1="${r1(cy + 14)}" x2="${r1(x)}" y2="${r1(y - 16)}"/>`; draw(c); }
+  };
+  draw(tree);
+  pos.forEach(([x, y], n) => {
+    if (n.leaf) { const s = leafText(n.tok); const w = s.length * 9 + 18; b += `<rect class="bx" x="${r1(x - w / 2)}" y="${y - 14}" width="${w}" height="28" rx="6"/>` + svgText(x, y + 5, s, 'b'); }
+    else b += `<circle class="${n === hl ? 'sh2' : 'bx'}" cx="${r1(x)}" cy="${y}" r="16"/>` + svgText(x, y + 5, OPS[n.op], n === hl ? 'b' : '') + (n.paren ? svgText(x + 22, y + 5, '( )', 's', 'start') : '');
+  });
+  if (!tree.leaf && hl) { const [x, y] = pos.get(hl); b += svgText(x, y + 34, 'つぎ', 'm'); }
+  return svgBox(W, 26 + H * 62 + 40, b, '計算の順番の木');
+}
+// 単位の位取り表: big 単位の値 V を、位ごとの単位に並べる (ratio は 10 のべき)
+function figUnitPlace(big, small, ratio, V) {
+  const k = Math.round(Math.log10(ratio));
+  const S = V.toDec(); const { ip, fp } = splitDec(S);
+  const pMax = Math.max(0, ip.replace(/^0+/, '').length - 1); const pMin = -Math.max(k, fp.length);
+  const head = []; const row = [];
+  for (let p = pMax; p >= pMin; p--) {
+    head.push(p >= 0 ? `${10 ** p} ${big}` : p >= -k ? `${10 ** (k + p)} ${small}` : `${fmtScaled(1, -(k + p))} ${small}`);
+    const d = p >= 0 ? (ip.length - 1 - p >= 0 ? ip[ip.length - 1 - p] : '0') : (fp[-p - 1] || '0');
+    row.push(d);
+  }
+  return figTable(head, [row], { rowHead: false, hlCol: pMax });
+}
+
 // ===== 問題の種類 =====
 // 各問題: {type, stage, level, html, text, slots:[{value:Fr, unit, prefer}], choices?, answerChoice?, explain: ()=>frames}
 // levels をもつステップは、10問の中で レベル1 → 5 と だんだん むずかしくなる
@@ -455,6 +624,19 @@ function carryNote(p, sv) {
   const split = rest.eq(0) ? '' : ` は ${up.toDec()} と ${rest.toDec()}。${up.toDec()}`;
   return `色のついた位は、数字をたすと 10 以上になります。${PLACE_NAMES[p]}の ${sv.toDec()}${split} は${PLACE_NAMES[p + 1]}の「1」なので、${PLACE_NAMES[p + 1]}に 1 くり上がります。`;
 }
+function niceMax(v) { const st = niceStep(v || 1, 5); return Math.ceil(v / st - 1e-9) * st; }
+// start から parts を順に たす/ひく ようすを数直線に
+function jumpLine(start, parts, sign, label) {
+  let cur = Fr.of(start); const jumps = [];
+  const marks = [{ v: 0, s: '0' }, { v: cur.val(), s: fv(cur) }];
+  // 小さすぎて見えない移動は、ひとつ前の移動にまとめる
+  const span = Math.max(Fr.of(start).val(), (sign > 0 ? Fr.of(start).add(parts.reduce((a, p) => a.add(p), new Fr(0))) : Fr.of(start)).val());
+  const merged = [];
+  parts.forEach((p) => { if (merged.length && p.val() < 1 && p.val() / span < 0.06) merged[merged.length - 1] = merged[merged.length - 1].add(p); else merged.push(p); });
+  merged.forEach((p) => { const nx = sign > 0 ? cur.add(p) : cur.sub(p); jumps.push({ a: cur.val(), b: nx.val(), s: (sign > 0 ? '+' : '−') + fv(p) }); cur = nx; });
+  marks.push({ v: cur.val(), s: fv(cur), cls: 'm' });
+  return (merged.length < parts.length ? '<!--merged-->' : '') + figNumberLine({ min: 0, max: niceMax(Math.max(Fr.of(start).val(), cur.val())), marks, jumps, label });
+}
 function pvAddFrames(aS, bS) {
   const A = placeParts(aS), B = placeParts(bS);
   const ps = [...new Set([...A, ...B].map((x) => x.p))].sort((x, y) => y - x);
@@ -469,43 +651,47 @@ function pvAddFrames(aS, bS) {
     if (!sv.eq(0)) sums.push(sv);
   }
   const total = Fr.dec(aS).add(Fr.dec(bS));
+  const tbl = `<table class="pv">${rows.join('')}</table>`;
   return [
-    { text: `位ごとに分けて たします。<table class="pv">${rows.join('')}</table>` },
-    { text: `位ごとの答えを あわせます: ${sums.map((x) => x.toDec()).join(' + ')} = <b>${total.toDec()}</b>${carry ? `<br><small>${carryNote(carry.p, carry.sv)} 筆算の「くり上がり」は、このことです。</small>` : ''}` },
+    { fig: tbl, text: '位ごとに分けて たします (表の1行が1つの位)。' },
+    { fig: jumpLine(aS, nonzeroParts(bS).map((x) => partFr(x.d, x.p)), 1, `${aS} + ${bS} の数直線`), text: `数直線で見ると、${aS} から ${bS} を位ごとに分けて 右へ進みます。` + (nonzeroParts(bS).length > 1 && jumpLine(aS, nonzeroParts(bS).map((x) => partFr(x.d, x.p)), 1, '').startsWith('<!--merged-->') ? '<br><small>図では、小さい位の移動をまとめてかいています。</small>' : '') },
+    { fig: tbl, text: `位ごとの答えを あわせます: ${sums.map((x) => x.toDec()).join(' + ')} = <b>${total.toDec()}</b>${carry ? `<br><small>${carryNote(carry.p, carry.sv)} 筆算の「くり上がり」は、このことです。</small>` : ''}` },
   ];
 }
 function pvSubFrames(aS, bS) {
   const parts = nonzeroParts(bS);
+  const fig = jumpLine(aS, parts.map((x) => partFr(x.d, x.p)), -1, `${aS} − ${bS} の数直線`);
   let cur = Fr.dec(aS); const lines = [];
   for (const x of parts) { const v = partFr(x.d, x.p); const nx = cur.sub(v); lines.push(`${cur.toDec()} − ${v.toDec()} = <b>${nx.toDec()}</b>`); cur = nx; }
-  if (parts.length < 2) return [{ text: `${aS} − ${bS} = <b>${cur.toDec()}</b>` }];
+  if (parts.length < 2) return [{ fig, text: `数直線で、${aS} から ${bS} だけ 左へもどります。${aS} − ${bS} = <b>${cur.toDec()}</b>` }];
   return [
-    { text: `ひく数 ${bS} を 位ごとに ${parts.map((x) => partVal(x.d, x.p)).join(' と ')} に分けて、順にひきます。` },
-    { text: lines.join('<br>') + `<br><small>大きい位から順にひくと、暗算でも考えやすくなります。</small>` },
+    { fig, text: `ひく数 ${bS} を 位ごとに ${parts.map((x) => partVal(x.d, x.p)).join(' と ')} に分けて、数直線で ${aS} から順に 左へもどります。` },
+    { fig, text: lines.join('<br>') + `<br><small>大きい位から順にひくと、暗算でも考えやすくなります。${fig.startsWith('<!--merged-->') ? '図では、小さい位の移動をまとめてかいています。' : ''}</small>` },
   ];
 }
+const partsStr = (S) => { const ps = nonzeroParts(S).map((x) => partVal(x.d, x.p)); return ps.length ? ps : [S]; };
 function pvMulFrames(aS, bS) {
   const A = splitDec(aS), B = splitDec(bS);
   const res = Fr.dec(aS).mul(Fr.dec(bS));
+  const intMulti = !A.places && !B.places && B.digits.length > 1;
+  const colsP = intMulti ? [aS] : partsStr(aS);
+  const rowsP = !B.places && B.digits.length === 1 ? [bS] : partsStr(bS);
+  const cells = rowsP.map((r) => colsP.map((c) => ({ s: fv(Fr.dec(c).mul(Fr.dec(r))) })));
+  const fig = figArea({ cols: colsP.map((c) => ({ s: c, w: +c })), rows: rowsP.map((r) => ({ s: r, h: +r })), cells, topNote: `よこ ${aS}`, leftNote: `たて ${bS}`, label: `${aS} × ${bS} の面積図` });
+  const prods = cells.flat().map((c) => c.s);
   const fs = [];
-  if (!B.places && B.digits.length === 1) {
-    const parts = nonzeroParts(aS);
-    if (parts.length >= 2) {
-      const ps = parts.map((x) => ({ v: partFr(x.d, x.p), s: partVal(x.d, x.p) }));
-      fs.push({ text: `${aS} を ${ps.map((x) => x.s).join(' と ')} に分けて、それぞれに ${bS} をかけます。<br>${ps.map((x) => `${x.s} × ${bS} = <b>${x.v.mul(Fr.dec(bS)).toDec()}</b>`).join('<br>')}` });
-      fs.push({ text: `あわせて ${ps.map((x) => x.v.mul(Fr.dec(bS)).toDec()).join(' + ')} = <b>${res.toDec()}</b>` });
-    }
-    if (A.places) fs.push({ text: `別の考え方: ${aS} は 0.${'0'.repeat(A.places - 1)}1 が ${+A.digits} こ。${+A.digits} × ${bS} = ${+A.digits * +bS} なので、0.${'0'.repeat(A.places - 1)}1 が ${+A.digits * +bS} こ = <b>${res.toDec()}</b>` });
-  } else if (!B.places && !A.places) {
-    const parts = nonzeroParts(bS);
-    const ps = parts.map((x) => ({ v: partFr(x.d, x.p), s: partVal(x.d, x.p) }));
-    fs.push({ text: `かける数 ${bS} を ${ps.map((x) => x.s).join(' と ')} に分けて、それぞれ ${aS} にかけます。<br>${ps.map((x) => `${aS} × ${x.s} = <b>${Fr.dec(aS).mul(x.v).toDec()}</b>`).join('<br>')}` });
-    fs.push({ text: `あわせて ${ps.map((x) => Fr.dec(aS).mul(x.v).toDec()).join(' + ')} = <b>${res.toDec()}</b><br><small>筆算で書く段は、この ${ps.length} つの数です (0 は書かずに、1つずつ左にずらして書きます)。</small>` });
+  if (prods.length > 1) {
+    fs.push({ fig, text: `${aS} × ${bS} は、たて ${bS}・よこ ${aS} の長方形の面積と考えられます。位ごとに分けて、小さい長方形の面積を求めます。<br>${rowsP.map((r) => colsP.map((c) => `${c} × ${r} = <b>${fv(Fr.dec(c).mul(Fr.dec(r)))}</b>`).join('<br>')).join('<br>')}` });
+    fs.push({ fig, text: `小さい長方形をあわせて ${prods.join(' + ')} = <b>${res.toDec()}</b>${intMulti ? `<br><small>筆算で書く段は、たての ${rowsP.join(' と ')} ごとの面積です (0 は書かずに、1つずつ左にずらして書きます)。</small>` : ''}` });
   } else {
+    fs.push({ fig, text: `${aS} × ${bS} は、たて ${bS}・よこ ${aS} の長方形の面積と考えられます。${aS} × ${bS} = <b>${res.toDec()}</b>` });
+  }
+  if (A.places || B.places) {
     const ua = A.places ? `0.${'0'.repeat(A.places - 1)}1` : '1', ub = B.places ? `0.${'0'.repeat(B.places - 1)}1` : '1';
-    const up = A.places + B.places;
-    fs.push({ text: `小さい単位の「いくつ分」で考えます。<br>${aS} は ${ua} が ${+A.digits} こ、${bS} は ${ub} が ${+B.digits} こ。` });
-    fs.push({ text: `${+A.digits} × ${+B.digits} = ${+A.digits * +B.digits}。${ua} × ${ub} = 0.${'0'.repeat(up - 1)}1 なので、答えは 0.${'0'.repeat(up - 1)}1 が ${+A.digits * +B.digits} こ = <b>${res.toDec()}</b>` });
+    const up = A.places + B.places; const uu = `0.${'0'.repeat(up - 1)}1`;
+    const na = +A.digits, nb = +B.digits;
+    fs.push({ fig: figTable(['', 'もとの数', '小さい単位', 'そのこ数'], [[`かけられる数`, aS, ua, na], [`かける数`, bS, ub, nb], ['答え', `<b>${res.toDec()}</b>`, uu, na * nb]], { sumRow: 2 }),
+      text: `別の考え方: 小さい単位の「いくつ分」で見ます。${na} × ${nb} = ${na * nb}。単位は ${ua} × ${ub} = ${uu} なので、答えは ${uu} が ${na * nb} こ = <b>${res.toDec()}</b>` });
   }
   return fs;
 }
@@ -514,27 +700,31 @@ function pvDivFrames(aS, bS) {
   const D = Fr.dec(aS).mul(10 ** B.places), d = +B.digits;
   const Ds = D.toDec(), Q = D.div(d);
   const fs = [];
-  if (B.places) fs.push({ text: `わる数 ${bS} を整数にするため、わる数とわられる数を両方 ${10 ** B.places} 倍します: ${aS} ÷ ${bS} = ${Ds} ÷ ${d}<br><small>両方を同じ数だけ倍しても、答え (商) は変わりません。</small>` });
+  if (B.places) fs.push({ fig: figTable(['', 'わられる数', 'わる数', '商'], [['もとの式', aS, bS, '□'], [`両方 ×${10 ** B.places}`, `<b>${Ds}</b>`, `<b>${d}</b>`, '□ (同じ)']], { hlCells: [[1, 1], [1, 2]] }),
+    text: `わる数 ${bS} を整数にするため、わる数とわられる数を両方 ${10 ** B.places} 倍します: ${aS} ÷ ${bS} = ${Ds} ÷ ${d}<br><small>両方を同じ数だけ倍しても、答え (商) は変わりません。</small>` });
+  const qParts = nonzeroParts(Q.toDec()).map((x) => partFr(x.d, x.p));
+  const chunks = qParts.map((q) => ({ q: fv(q), c: fv(q.mul(d)) }));
+  const fig = figArea({ cols: chunks.map((c) => ({ s: c.q, w: +c.q, cls: 'm' })), rows: [{ s: String(d) }], cells: [chunks.map((c) => ({ s: c.c }))], topNote: 'よこ = 商', leftNote: `たて = わる数 ${d}、面積 = わられる数 ${Ds}`, label: `${Ds} ÷ ${d} の面積図` });
+  if (chunks.length >= 2) {
+    fs.push({ fig, text: `わり算は「面積 ${Ds}、たて ${d} の長方形の よこ の長さ」を求めることです。${Ds} を ${d} でわりやすい数に分けます: ${Ds} = ${chunks.map((x) => x.c).join(' + ')}<br>${chunks.map((x) => `${x.c} ÷ ${d} = <b>${x.q}</b>`).join('<br>')}` });
+    fs.push({ fig, text: `よこの長さをあわせて ${chunks.map((x) => x.q).join(' + ')} = <b>${Q.toDec()}</b><br><small>筆算では、この分け方を上の位から順に行っています。</small>` });
+  } else {
+    fs.push({ fig, text: `わり算は「面積 ${Ds}、たて ${d} の長方形の よこ の長さ」を求めることです。${d} × □ = ${Ds} になる □ をさがします。${d} × ${Q.toDec()} = ${Ds} なので <b>${Q.toDec()}</b>` });
+  }
   const Dp = splitDec(Ds).places;
-  let N = Fr.dec(Ds).mul(10 ** Dp), M = N.div(d);
+  const N = Fr.dec(Ds).mul(10 ** Dp), M = N.div(d);
   if (Dp && M.isInt()) {
     const u = `0.${'0'.repeat(Dp - 1)}1`;
-    fs.push({ text: `${Ds} は ${u} が ${N.n} こ。${N.n} ÷ ${d} = ${M.n} なので、${u} が ${M.n} こ = <b>${Q.toDec()}</b>` });
-    return fs;
-  }
-  if (Q.isInt()) {
-    const parts = nonzeroParts(String(Q.n));
-    if (parts.length >= 2) {
-      const chunks = parts.map((x) => ({ q: partVal(x.d, x.p), c: d * x.d * 10 ** x.p }));
-      fs.push({ text: `${Ds} を ${d} でわりやすい数に分けます: ${Ds} = ${chunks.map((x) => x.c).join(' + ')}<br>${chunks.map((x) => `${x.c} ÷ ${d} = <b>${x.q}</b>`).join('<br>')}` });
-      fs.push({ text: `あわせて ${chunks.map((x) => x.q).join(' + ')} = <b>${Q.n}</b><br><small>筆算では、この分け方を上の位から順に行っています。</small>` });
-    } else {
-      fs.push({ text: `${d} × □ = ${Ds} になる □ をさがします。${d} × ${Q.n} = ${Ds} なので <b>${Q.n}</b>` });
-    }
+    fs.push({ fig: figTable(['', '数', `${u} のこ数`], [['わられる数', Ds, N.n], ['÷ ' + d, '', `${N.n} ÷ ${d} = ${M.n}`], ['商', `<b>${Q.toDec()}</b>`, M.n]], { sumRow: 2 }), text: `別の考え方: ${Ds} は ${u} が ${N.n} こ。${N.n} ÷ ${d} = ${M.n} なので、${u} が ${M.n} こ = <b>${Q.toDec()}</b>` });
   }
   return fs;
 }
-const withHissan = (pv, hs) => pv.concat([{ text: '同じ計算を、筆算で1段ずつ見てみましょう。' }], hs);
+// 位ごとの考え方 (図) のあとに、同じ計算の筆算を1段ずつ。図のない説明だけの段ははぶく (上の図で説明ずみ)
+function withHissan(pv, hs) {
+  const g = hs.filter((f) => f.grid);
+  if (g.length) g[0] = { ...g[0], text: `<b>同じ計算を、筆算で1段ずつ見てみましょう。</b><br>${g[0].text}` };
+  return pv.concat(g);
+}
 
 // --- A1 整数 / A2 小数 (レベルつき) ---
 function decStr(intDigitsMax, places) {
@@ -620,14 +810,39 @@ GEN.dec_div = (lv = 5) => {
 GEN.mental = () => {
   const kind = ri(0, 7);
   let q, v, frames;
-  if (kind === 0) { const k = ri(2, 9) * 4; q = `25 × ${k}`; v = 25 * k; frames = textFrames(`${k} を 4 × ${k / 4} に分けます。`, `25 × 4 = 100 を先に計算すると、100 × ${k / 4} = ${v}`); }
-  else if (kind === 1) { const x = ri(23, 87); const a = pick([98, 99, 97, 198]); q = `${a} + ${x}`; v = a + x; const r = Math.ceil(a / 100) * 100; frames = textFrames(`${a} を ${r} − ${r - a} と考えます。`, `${r} + ${x} = ${r + x}、そこから ${r - a} をひいて ${v}`); }
-  else if (kind === 2) { const x = ri(12, 48); q = `${x} × 99`; v = x * 99; frames = textFrames('99 を 100 − 1 と考えます。', `${x} × 100 = ${x * 100}、そこから ${x} をひいて ${v}`); }
-  else if (kind === 3) { const x = ri(13, 98) * 2; q = `${x} × 5`; v = x * 5; frames = textFrames('× 5 は「× 10 してから ÷ 2」と同じです (5 = 10 ÷ 2)。', `${x} × 10 = ${x * 10}、÷ 2 で ${v}`); }
-  else if (kind === 4) { const k = ri(2, 9); q = `125 × ${8 * k}`; v = 125 * 8 * k; frames = textFrames(`${8 * k} を 8 × ${k} に分けます。`, `125 × 8 = 1000 を使うと、1000 × ${k} = ${v}`); }
-  else if (kind === 5) { const x = fmtScaled(ri(11, 99), 1); q = `2.5 × ${x} × 4`; v = Fr.dec(x).mul(10); frames = textFrames('かけ算は順番を入れかえても答えは同じです。', `2.5 × 4 = 10 を先に計算すると、10 × ${x} = ${v.toDec()}`); }
-  else if (kind === 6) { const x = ri(12, 48); q = `102 × ${x}`; v = 102 * x; frames = textFrames('102 を 100 + 2 に分けます。', `100 × ${x} = ${100 * x}、2 × ${x} = ${2 * x}、あわせて ${v}`); }
-  else { const x = ri(123, 876); q = `1000 − ${x}`; v = 1000 - x; frames = textFrames(`1000 を 999 + 1 と考えると、くり下がりがなくなります。`, `999 − ${x} = ${999 - x}、1 をたして ${v}`); }
+  const F = (fig, ...ts) => ts.map((t, i) => ({ fig, text: t }));
+  if (kind === 0 || kind === 4) {
+    const [base, g] = kind === 0 ? [25, 4] : [125, 8]; const k = ri(2, 9); const m = g * k;
+    q = `${base} × ${m}`; v = base * m;
+    const fig = figArea({ cols: Array.from({ length: k }, () => ({ s: String(g), w: 1 })), rows: [{ s: String(base) }], cells: [Array.from({ length: k }, () => ({ s: String(base * g), cls: 'sh' }))], topNote: `よこ ${m} = ${g} × ${k}`, leftNote: `たて ${base}`, label: `${q} の面積図` });
+    frames = F(fig, `${m} を ${g} × ${k} に分けます。たて ${base}・よこ ${g} の長方形が ${k} こ並んでいます。`, `${base} × ${g} = ${base * g} を先に計算すると、${base * g} × ${k} = <b>${v}</b>`);
+  } else if (kind === 1) {
+    const x = ri(23, 87); const a = pick([98, 99, 97, 198]); q = `${a} + ${x}`; v = a + x; const r = Math.ceil(a / 100) * 100;
+    const fig = figNumberLine({ min: 0, max: niceMax(r + x), marks: [{ v: 0, s: '0' }, { v: x, s: String(x) }, { v: v, s: String(v), cls: 'm' }], jumps: [{ a: x, b: x + r, s: `+${r}` }, { a: x + r, b: v, s: `−${r - a}` }], label: `${q} の数直線` });
+    frames = F(fig, `${a} を ${r} − ${r - a} と考えます。数直線で ${x} から ${r} 進んで、${r - a} もどります。`, `${x} + ${r} = ${r + x}、そこから ${r - a} をひいて <b>${v}</b>`);
+  } else if (kind === 2) {
+    const x = ri(12, 48); q = `${x} × 99`; v = x * 99;
+    const fig = figArea({ cols: [{ s: '99', w: 99 }, { s: '1', w: 1, cls: 'm' }], rows: [{ s: String(x) }], cells: [[{ s: String(v), cls: 'sh' }, { s: String(x), cls: 'cut' }]], topNote: 'よこ 100 = 99 + 1', leftNote: `たて ${x}`, label: `${q} の面積図` });
+    frames = F(fig, `99 を 100 − 1 と考えます。たて ${x}・よこ 100 の長方形から、はしの よこ 1 の部分を取りのぞきます。`, `${x} × 100 = ${x * 100}、そこから ${x} × 1 = ${x} をひいて <b>${v}</b>`);
+  } else if (kind === 3) {
+    const x = ri(13, 98) * 2; q = `${x} × 5`; v = x * 5;
+    const fig = figDoubleLine({ top: '数', bot: '何倍', cols: [{ pos: 0, t: '0', b: '0' }, { pos: 1, t: String(x), b: '1' }, { pos: 5, t: String(v), b: '5', ut: true }, { pos: 10, t: String(x * 10), b: '10' }], arrows: [{ from: 1, to: 10, s: '×10', side: 'bot' }, { from: 10, to: 5, s: '÷2', side: 'top' }], label: `${q} の二本の数直線` });
+    frames = F(fig, '× 5 は「× 10 してから ÷ 2」と同じです (5 は 10 の半分)。', `${x} × 10 = ${x * 10}、その半分で <b>${v}</b>`);
+  } else if (kind === 5) {
+    const x = fmtScaled(ri(11, 99), 1); q = `2.5 × ${x} × 4`; v = Fr.dec(x).mul(10);
+    const t1 = { op: '*', l: { op: '*', l: { leaf: true, tok: num('2.5') }, r: { leaf: true, tok: num('4') } }, r: { leaf: true, tok: num(x) } };
+    const fig = figTree(t1, t1.l, numText);
+    frames = F(fig, `かけ算は順番を入れかえても答えは同じです。2.5 × 4 を先に計算するように並べかえます。`, `2.5 × 4 = 10 なので、10 × ${x} = <b>${v.toDec()}</b>`);
+  } else if (kind === 6) {
+    const x = ri(12, 48); q = `102 × ${x}`; v = 102 * x;
+    const fig = figArea({ cols: [{ s: '100', w: 100 }, { s: '2', w: 2 }], rows: [{ s: String(x) }], cells: [[{ s: String(100 * x) }, { s: String(2 * x), cls: 'sh2' }]], topNote: 'よこ 102 = 100 + 2', leftNote: `たて ${x}`, label: `${q} の面積図` });
+    frames = F(fig, '102 を 100 + 2 に分けます。長方形を 2 つに分けて考えます。', `100 × ${x} = ${100 * x}、2 × ${x} = ${2 * x}、あわせて <b>${v}</b>`);
+  } else {
+    const x = ri(123, 876); q = `1000 − ${x}`; v = 1000 - x;
+    const d = String(x).split(''), r = String(999 - x).padStart(3, '0').split('');
+    const fig = figTable(['', '百の位', '十の位', '一の位'], [['999', '9', '9', '9'], ['− ' + x, ...d], ['= ' + (999 - x), ...r.map((c) => `<b>${c}</b>`)]], { sumRow: 2 });
+    frames = F(fig, `1000 を 999 + 1 と考えると、どの位も 9 からひくので くり下がりがなくなります。`, `999 − ${x} = ${999 - x}、1 をたして <b>${v}</b>`);
+  }
   return { html: `${q} =`, text: q, slots: [slot(v)], note: '暗算でくふうしてみよう', explain: () => frames };
 };
 
@@ -648,16 +863,18 @@ function frAddSubExplain(a, b, op) {
   const L = lcm(a.d, b.d);
   const fs = [];
   const res = op === '+' ? a.add(b) : a.sub(b);
-  if (a.d !== b.d) {
-    fs.push({ text: `分母がちがうので、そろえます (通分)。${a.d} と ${b.d} の最小公倍数は ${L} です。` });
-    fs.push({ text: `${frHTML(a, false)} = ${fracHTML(a.n * L / a.d, L)}、 ${frHTML(b, false)} = ${fracHTML(b.n * L / b.d, L)}<br><small>分母と分子に同じ数をかけても、大きさは変わりません。</small>` });
-  }
   const an = a.n * L / a.d, bn = b.n * L / b.d, rn = op === '+' ? an + bn : an - bn;
-  fs.push({ text: `分子どうしを${op === '+' ? 'たし' : 'ひき'}ます: ${fracHTML(an, L)} ${OPS[op]} ${fracHTML(bn, L)} = ${fracHTML(rn, L)}` });
+  const sA = frText(a), sB = frText(b);
+  const barsL = figFracBars([{ f: a, d: L, s: `${an}/${L}` }, { f: b, d: L, s: `${bn}/${L}`, cls: 'sh3' }, { f: res, d: L, s: `${op === '+' ? 'あわせて' : 'ちがい'} ${rn}/${L}`, cls: 'sh2', lcls: 'm' }]);
+  if (a.d !== b.d) {
+    fs.push({ fig: figFracBars([{ f: a, d: a.d, s: sA }, { f: b, d: b.d, s: sB, cls: 'sh3' }]), text: `テープ図で見ると、${sA} と ${sB} は 1目もりの大きさ (分母) がちがうので、このままでは${op === '+' ? 'たせ' : 'ひけ'}ません。${a.d} と ${b.d} の最小公倍数 ${L} で、目もりをそろえます (通分)。` });
+    fs.push({ fig: figFracBars([{ f: a, d: L, s: `${sA} = ${an}/${L}` }, { f: b, d: L, s: `${sB} = ${bn}/${L}`, cls: 'sh3' }]), text: `${frHTML(a, false)} = ${fracHTML(an, L)}、 ${frHTML(b, false)} = ${fracHTML(bn, L)}<br><small>目もりを細かくしても、テープの長さ (大きさ) は変わりません。分母と分子に同じ数をかけるのは、このことです。</small>` });
+  }
+  fs.push({ fig: barsL, text: `1/${L} の目もりが ${an} こ と ${bn} こ。${op === '+' ? 'あわせて' : 'ちがいは'} ${rn} こなので ${fracHTML(an, L)} ${OPS[op]} ${fracHTML(bn, L)} = ${fracHTML(rn, L)}` });
   const g = gcd(rn, L);
-  if (g > 1) fs.push({ text: `分母と分子を ${g} でわって約分します: ${fracHTML(rn, L)} = ${frHTML(res, false)}` });
-  if (res.n > res.d && !res.isInt()) fs.push({ text: `仮分数は帯分数にもできます: ${frHTML(res, false)} = ${frHTML(res, true)} (どちらで答えても正解です)` });
-  else fs.push({ text: `答えは ${frHTML(res)} です。` });
+  if (g > 1) fs.push({ fig: figFracBars([{ f: res, d: L, s: `${rn}/${L}`, cls: 'sh2' }, { f: res, d: res.d, s: `${frText(res, false)}`, cls: 'sh2' }]), text: `分母と分子を ${g} でわって約分します: ${fracHTML(rn, L)} = ${frHTML(res, false)}<br><small>目もりを ${g} こずつ まとめても、長さは同じです。</small>` });
+  if (res.n > res.d && !res.isInt()) fs.push({ fig: figFracBars([{ f: res, d: res.d, s: frText(res, true), cls: 'sh2' }]), text: `仮分数は帯分数にもできます: ${frHTML(res, false)} = ${frHTML(res, true)} (どちらで答えても正解です)` });
+  else fs.push({ fig: figFracBars([{ f: res, d: res.d, s: frText(res, true), cls: 'sh2' }]), text: `答えは ${frHTML(res)} です。` });
   return fs;
 }
 GEN.fr_add = () => {
@@ -670,23 +887,36 @@ GEN.fr_sub = () => {
   const v = a.sub(b);
   return { html: binHTML(fTok(a), '-', fTok(b)), text: binText(fTok(a), '-', fTok(b)), slots: [slot(v, '', 'frac')], explain: () => frAddSubExplain(a, b, '-') };
 };
+// 分数の ×・÷ を「1 にあたる量」で見る二本の数直線
+function frRatioFig(a, b, isDiv) {
+  const res = isDiv ? a.div(b) : a.mul(b);
+  const cols = [{ pos: 0, t: '0', b: '0' }, { pos: 1, t: isDiv ? frText(res) : frText(a), b: '1', ut: isDiv }, { pos: b.val(), t: isDiv ? frText(a) : frText(res), b: frText(b), ut: !isDiv }];
+  return figDoubleLine({ top: '量', bot: '倍 (割合)', cols, arrows: [isDiv ? { from: b.val(), to: 1, s: `÷ ${frText(b)}`, side: 'top' } : { from: 1, to: b.val(), s: `× ${frText(b)}`, side: 'top' }], label: '二本の数直線' });
+}
 function frMulExplain(a, b, isDiv) {
   const fs = [];
   let x = a, y = b;
+  const ratio = frRatioFig(a, b, isDiv);
   if (isDiv) {
+    fs.push({ fig: ratio, text: `${frText(a)} ÷ ${frText(b)} は、「${frText(b)} にあたる量が ${frText(a)} のとき、1 にあたる量」です。` });
     const inv = new Fr(b.d, b.n);
-    fs.push({ text: `分数でわるときは、わる数の分母と分子を入れかえてかけます: ÷ ${frHTML(b, false)} → × ${fracHTML(b.d, b.n)}` });
-    fs.push({ text: `<small>わけ: ÷ ${frHTML(b, false)} は「${b.n} でわって ${b.d} をかける」の反対、つまり「${b.d} をかけて ${b.n} でわる」と同じだからです。</small>` });
+    fs.push({ fig: ratio, text: `分数でわるときは、わる数の分母と分子を入れかえてかけます: ÷ ${frHTML(b, false)} → × ${fracHTML(b.d, b.n)}<br><small>わけ: 数直線で ${frText(b)} から 1 にもどるには、まず ${b.n} でわって 1/${b.d} にあたる量を出し、それを ${b.d} 倍します。つまり「${b.d} をかけて ${b.n} でわる」と同じです。</small>` });
     y = inv;
+  } else if (a.val() < 1 && b.val() < 1) {
+    const area = figFracArea(a, b);
+    fs.push({ fig: area, text: `${frText(a)} × ${frText(b)} は、たて ${frText(a)} m・よこ ${frText(b)} m の長方形の面積と考えられます。1 m² の正方形を たて ${a.d}・よこ ${b.d} に分けると、小さい長方形は 1 つ 1/${a.d * b.d} m²。` });
+    fs.push({ fig: area, text: `こい色の部分は たて ${a.n} こ × よこ ${b.n} こ = ${a.n * b.n} こ。だから ${fracHTML(`${a.n} × ${b.n}`, `${a.d} × ${b.d}`)} = ${fracHTML(a.n * b.n, a.d * b.d)}。分子どうし・分母どうしをかけるのは、このことです。` });
+  } else {
+    fs.push({ fig: ratio, text: `${frText(a)} × ${frText(b)} は、「1 にあたる量が ${frText(a)} のとき、${frText(b)} にあたる量」です。` });
   }
-  if (!x.isInt() && x.n > x.d && a.n > a.d) fs.push({ text: `帯分数は仮分数になおしてから計算します: ${frHTML(x, true)} = ${frHTML(x, false)}` });
+  if (!x.isInt() && x.n > x.d && a.n > a.d) fs.push({ fig: figFracBars([{ f: a, d: a.d, s: `${frText(a, true)} = ${frText(a, false)}` }]), text: `帯分数は仮分数になおしてから計算します: ${frHTML(x, true)} = ${frHTML(x, false)}` });
   const xn = x.n, xd = x.d, yn = isDiv ? b.d : y.n, yd = isDiv ? b.n : y.d;
   const g1 = gcd(xn, yd), g2 = gcd(yn, xd);
-  let t = `分子どうし、分母どうしをかけます: ${fracHTML(`${xn} × ${yn}`, `${xd} × ${yd}`)}`;
-  fs.push({ text: t });
-  if (g1 > 1 || g2 > 1) fs.push({ text: `かける前に約分すると、計算が楽になります。${g1 > 1 ? `${xn} と ${yd} は ${g1} でわれます。` : ''}${g2 > 1 ? `${yn} と ${xd} は ${g2} でわれます。` : ''}<br>${fracHTML(`${xn / g1} × ${yn / g2}`, `${xd / g2} × ${yd / g1}`)}` });
   const res = isDiv ? a.div(b) : a.mul(b);
-  fs.push({ text: `答えは ${frHTML(res, false)}${res.n > res.d && !res.isInt() ? ` (= ${frHTML(res, true)})` : ''} です。` });
+  const tbl = figTable(['', '分子', '分母'], [[frText(x, false), xn, xd], [`× ${yn}/${yd}`, yn, yd], ['かける', `${xn} × ${yn}`, `${xd} × ${yd}`], ['答え', `<b>${res.n}</b>`, `<b>${res.d}</b>`]], { sumRow: 3 });
+  fs.push({ fig: tbl, text: `分子どうし、分母どうしをかけます: ${fracHTML(`${xn} × ${yn}`, `${xd} × ${yd}`)}` });
+  if (g1 > 1 || g2 > 1) fs.push({ fig: tbl, text: `かける前に約分すると、計算が楽になります。${g1 > 1 ? `${xn} と ${yd} は ${g1} でわれます。` : ''}${g2 > 1 ? `${yn} と ${xd} は ${g2} でわれます。` : ''}<br>${fracHTML(`${xn / g1} × ${yn / g2}`, `${xd / g2} × ${yd / g1}`)}` });
+  fs.push({ fig: ratio, text: `答えは ${frHTML(res, false)}${res.n > res.d && !res.isInt() ? ` (= ${frHTML(res, true)})` : ''} です。` });
   return fs;
 }
 GEN.fr_mul = () => {
@@ -757,7 +987,7 @@ function exprSteps(tokens) {
     if (n.op === '*' || n.op === '/') return 'かけ算・わり算を、たし算・ひき算より先に計算します';
     return '左から順に計算します';
   };
-  frames.push({ text: `計算の順番: ① かっこの中 → ② かけ算・わり算 → ③ たし算・ひき算 (同じなかまは左から)。<div class="expr">${tokensHTML(nodeTokens(tree))}</div>` });
+  frames.push({ fig: figTree(tree, firstReducible(tree), numText), text: `計算の順番: ① かっこの中 → ② かけ算・わり算 → ③ たし算・ひき算 (同じなかまは左から)。<br><small>図は「式の木」です。上の数を 下の ○ の計算で まとめていきます。黄色の ○ が次の計算です。</small><div class="expr">${tokensHTML(nodeTokens(tree))}</div>` });
   for (let guard = 0; guard < 8 && !tree.leaf; guard++) {
     const n = firstReducible(tree);
     const a = n.l.tok, b = n.r.tok;
@@ -771,7 +1001,7 @@ function exprSteps(tokens) {
     const leaf = { leaf: true, tok: num(v, kind) };
     const txt = `${reason(n, tree)}: ${numHTML(a)} ${OPS[n.op]} ${numHTML(b)} = ${numHTML(leaf.tok)}${notes}`;
     tree = replaceNode(tree, n, leaf);
-    frames.push({ text: `${txt}<div class="expr">${tokensHTML(nodeTokens(tree))}</div>` });
+    frames.push({ fig: figTree(tree, tree.leaf ? null : firstReducible(tree), numText), text: `${txt}<div class="expr">${tokensHTML(nodeTokens(tree))}</div>` });
   }
   return { frames, value: tree.tok.v, kind: tree.tok.kind };
 }
@@ -853,6 +1083,18 @@ function unitWhy(big, small, ratio) {
   if (big === 'L' && small === 'cm³') return '1 L は 1辺 10 cm の立方体の体積なので、10 cm × 10 cm × 10 cm = 1000 cm³';
   return `1 ${big} = ${ratio} ${small}`;
 }
+// どのフレームにも同じ図をつける
+const figFrames = (fig, ...ts) => ts.map((t) => ({ fig, text: t }));
+// 分 (または秒) の数直線。60 ごとに大きい目もり
+function minuteLine(total, u = '分', bigU = '時間') {
+  const H = Math.floor(total / 60), M = total % 60; const max = (H + 1) * 60;
+  const marks = [{ v: 0, s: '0' }]; for (let k = 1; k <= H + 1; k++) if (k * 60 !== total) marks.push({ v: k * 60, s: `${k * 60}${u}` });
+  marks.push({ v: total, s: `${total}${u}`, cls: 'm' });
+  const jumps = [];
+  if (H) jumps.push({ a: 0, b: H * 60, s: `${H}${bigU}` });
+  if (M) jumps.push({ a: H * 60, b: total, s: `${M}${u}` });
+  return figNumberLine({ min: 0, max, marks, jumps, label: `${u}の数直線` });
+}
 const niceDec = (maxPlaces) => fmtScaled(ri(1, 999), ri(0, maxPlaces));
 GEN.conv = () => {
   const [big, small, ratio, fam] = pick(UNIT_PAIRS);
@@ -873,11 +1115,13 @@ GEN.conv = () => {
   const Ls = ansText(L), Ss = ansText(S);
   const html = toSmall ? `${Ls} ${big} = <b class="box">□</b> ${small}` : `${Ss} ${small} = <b class="box">□</b> ${big}`;
   const text = toSmall ? `${Ls} ${big} = □ ${small}` : `${Ss} ${small} = □ ${big}`;
+  const pow10 = String(ratio).replace(/0/g, '') === '1';
+  const dl = figDoubleLine({ top: big, bot: small, cols: [{ pos: 0, t: '0', b: '0' }, { pos: 1, t: '1', b: String(ratio) }, { pos: L.val(), t: Ls, b: Ss, ut: !toSmall, ub: toSmall }], arrows: toSmall ? [{ from: 1, to: L.val(), s: `×${Ls}`, side: 'top' }] : [], label: '単位の二本の数直線' });
   const frames = [
-    { text: unitWhy(big, small, ratio) + '。' },
+    { fig: dl, text: unitWhy(big, small, ratio) + '。二本の数直線で、上の目もりと下の目もりが同じ量を表します。' },
     toSmall
-      ? { text: `大きい単位 → 小さい単位 なので、数は大きくなります。${Ls} × ${ratio} = ${Ss}${ratio % 10 === 0 && String(ratio).replace(/0/g, '') === '1' ? `<br><small>× ${ratio} は、小数点を右に ${String(ratio).length - 1} つ動かすのと同じです。</small>` : ''}` }
-      : { text: `小さい単位 → 大きい単位 なので、数は小さくなります。${Ss} ÷ ${ratio} = ${ansText(L)}${ratio % 10 === 0 && String(ratio).replace(/0/g, '') === '1' ? `<br><small>÷ ${ratio} は、小数点を左に ${String(ratio).length - 1} つ動かすのと同じです。</small>` : ''}` },
+      ? { fig: pow10 ? figUnitPlace(big, small, ratio, L) : dl, text: `大きい単位 → 小さい単位 なので、数は大きくなります。${Ls} × ${ratio} = ${Ss}${ratio % 10 === 0 && String(ratio).replace(/0/g, '') === '1' ? `<br><small>× ${ratio} は、小数点を右に ${String(ratio).length - 1} つ動かすのと同じです。表の数字のならびは同じで、どの単位で読むかが変わるだけです。</small>` : ''}` }
+      : { fig: pow10 ? figUnitPlace(big, small, ratio, L) : dl, text: `小さい単位 → 大きい単位 なので、数は小さくなります。${Ss} ÷ ${ratio} = ${ansText(L)}${ratio % 10 === 0 && String(ratio).replace(/0/g, '') === '1' ? `<br><small>÷ ${ratio} は、小数点を左に ${String(ratio).length - 1} つ動かすのと同じです。表の数字のならびは同じで、どの単位で読むかが変わるだけです。</small>` : ''}` },
   ];
   return { html, text, slots: [toSmall ? slot(S, small) : slot(L, big)], explain: () => frames };
 };
@@ -885,21 +1129,21 @@ GEN.time_mix = () => {
   const v = ri(0, 3);
   if (v === 0) {
     const h = ri(1, 3), m = ri(1, 11) * 5;
-    return { html: `${h}時間${m}分 = <b class="box">□</b> 分`, text: `${h}時間${m}分 = □分`, slots: [slot(h * 60 + m, '分')], explain: () => textFrames('1時間 = 60分 です。', `${h}時間 = 60 × ${h} = ${h * 60}分。${h * 60} + ${m} = ${h * 60 + m}分`) };
+    return { html: `${h}時間${m}分 = <b class="box">□</b> 分`, text: `${h}時間${m}分 = □分`, slots: [slot(h * 60 + m, '分')], explain: () => figFrames(minuteLine(h * 60 + m), '1時間 = 60分 です。数直線の大きい目もりが 1時間 (60分) です。', `${h}時間 = 60 × ${h} = ${h * 60}分。${h * 60} + ${m} = ${h * 60 + m}分`) };
   }
   if (v === 1) {
     const M = ri(65, 250); const h = Math.floor(M / 60), m = M % 60;
     if (m === 0) return GEN.time_mix();
-    return { html: `${M}分 = <b class="box">□</b> 時間 <b class="box">□</b> 分`, text: `${M}分 = □時間□分`, slots: [slot(h, '時間'), slot(m, '分')], explain: () => textFrames('60分で 1時間 です。', `${M} ÷ 60 = ${h} あまり ${m}。だから ${h}時間${m}分`) };
+    return { html: `${M}分 = <b class="box">□</b> 時間 <b class="box">□</b> 分`, text: `${M}分 = □時間□分`, slots: [slot(h, '時間'), slot(m, '分')], explain: () => figFrames(minuteLine(M), '60分で 1時間 です。数直線で、60分ごとの大きい目もりをいくつこえるか見ます。', `${M} ÷ 60 = ${h} あまり ${m}。だから ${h}時間${m}分`) };
   }
   if (v === 2) {
     const h = ri(0, 3), m = pick([6, 12, 15, 18, 24, 30, 36, 42, 45, 48, 54]);
     const val = new Fr(h * 60 + m, 60);
     const left = h ? `${h}時間${m}分` : `${m}分`;
-    return { html: `${left} = <b class="box">□</b> 時間`, text: `${left} = □時間`, slots: [slot(val, '時間')], note: '小数か分数で答えよう', explain: () => textFrames('1分は 1時間の 1/60 です。', `${m}分 = ${fracHTML(m, 60)} 時間 = ${frHTML(new Fr(m, 60), false)} 時間${new Fr(m, 60).terminating() ? ` = ${new Fr(m, 60).toDec()} 時間` : ''}`, `だから ${left} = ${ansHTML(val)} 時間${val.terminating() ? '' : ` (${frHTML(val, false)} でも正解)`}`) };
+    return { html: `${left} = <b class="box">□</b> 時間`, text: `${left} = □時間`, slots: [slot(val, '時間')], note: '小数か分数で答えよう', explain: () => figFrames(figDoubleLine({ top: '分', bot: '時間', cols: [{ pos: 0, t: '0', b: '0' }, { pos: 60, t: '60', b: '1' }, { pos: h * 60 + m, t: String(h * 60 + m), b: ansText(val), ub: true }], arrows: [{ from: 60, to: h * 60 + m, s: `×${frText(val)}`, side: 'bot' }], label: '分と時間の二本の数直線' }), '1分は 1時間の 1/60 です。上が分、下が時間の目もりです。', `${m}分 = ${fracHTML(m, 60)} 時間 = ${frHTML(new Fr(m, 60), false)} 時間${new Fr(m, 60).terminating() ? ` = ${new Fr(m, 60).toDec()} 時間` : ''}`, `だから ${left} = ${ansHTML(val)} 時間${val.terminating() ? '' : ` (${frHTML(val, false)} でも正解)`}`) };
   }
   const mi = ri(1, 5), s = ri(1, 11) * 5;
-  return { html: `${mi}分${s}秒 = <b class="box">□</b> 秒`, text: `${mi}分${s}秒 = □秒`, slots: [slot(mi * 60 + s, '秒')], explain: () => textFrames('1分 = 60秒 です。', `${mi}分 = ${mi * 60}秒。${mi * 60} + ${s} = ${mi * 60 + s}秒`) };
+  return { html: `${mi}分${s}秒 = <b class="box">□</b> 秒`, text: `${mi}分${s}秒 = □秒`, slots: [slot(mi * 60 + s, '秒')], explain: () => figFrames(minuteLine(mi * 60 + s, '秒', '分'), '1分 = 60秒 です。数直線の大きい目もりが 1分 (60秒) です。', `${mi}分 = ${mi * 60}秒。${mi * 60} + ${s} = ${mi * 60 + s}秒`) };
 };
 GEN.len_mix = () => {
   const v = ri(0, 3);
@@ -910,33 +1154,48 @@ GEN.len_mix = () => {
     const tot = add ? (a1 * 100 + a2) + (b1 * 100 + b2) : (a1 * 100 + a2) - (b1 * 100 + b2);
     const m = Math.floor(tot / 100), c = tot % 100;
     const op = add ? '+' : '−';
-    const fr = add
+    const tb = figTable(['', 'm', 'cm'], add
+      ? [[`${a1} m ${a2} cm`, a1, a2], [`+ ${b1} m ${b2} cm`, b1, b2], ...(a2 + b2 >= 100 ? [['くり上がり', '+1', '−100']] : []), ['答え', `<b>${m}</b>`, `<b>${c}</b>`]]
+      : [[`${a1} m ${a2} cm`, a1, a2], ...(a2 >= b2 ? [] : [['1 m を cm に', '−1', '+100']]), [`− ${b1} m ${b2} cm`, b1, b2], ['答え', `<b>${m}</b>`, `<b>${c}</b>`]], { sumRow: add ? (a2 + b2 >= 100 ? 3 : 2) : (a2 >= b2 ? 2 : 3) });
+    const fr = (add
       ? textFrames('m は m どうし、cm は cm どうし計算します。', `cm: ${a2} + ${b2} = ${a2 + b2} cm${a2 + b2 >= 100 ? `。100 cm = 1 m なので、1 m くり上げて ${a2 + b2 - 100} cm` : ''}`, `m: ${a1} + ${b1}${a2 + b2 >= 100 ? ' + 1' : ''} = ${m} m。答えは ${m} m ${c} cm`)
-      : textFrames('m は m どうし、cm は cm どうし計算します。', a2 >= b2 ? `cm: ${a2} − ${b2} = ${c} cm` : `cm: ${a2} − ${b2} はひけないので、1 m (= 100 cm) をかりて ${a2 + 100} − ${b2} = ${c} cm`, `m: ${a1}${a2 >= b2 ? '' : ' − 1'} − ${b1} = ${m} m。答えは ${m} m ${c} cm`);
+      : textFrames('m は m どうし、cm は cm どうし計算します。', a2 >= b2 ? `cm: ${a2} − ${b2} = ${c} cm` : `cm: ${a2} − ${b2} はひけないので、1 m (= 100 cm) をかりて ${a2 + 100} − ${b2} = ${c} cm`, `m: ${a1}${a2 >= b2 ? '' : ' − 1'} − ${b1} = ${m} m。答えは ${m} m ${c} cm`)).map((f) => ({ ...f, fig: tb }));
     return { html: `${a1} m ${a2} cm ${op} ${b1} m ${b2} cm = <b class="box">□</b> m <b class="box">□</b> cm`, text: `${a1}m${a2}cm ${op} ${b1}m${b2}cm`, slots: [slot(m, 'm'), slot(c, 'cm')], explain: () => fr };
   }
   if (v === 2) {
     const [big, small, ratio] = pick([['kg', 'g', 1000], ['km', 'm', 1000], ['L', 'mL', 1000], ['m', 'cm', 100]]);
     const a = ri(1, 9), b = ratio === 1000 ? pick([ri(1, 9) * 100, ri(1, 99) * 10, ri(1, 999), 50, 5]) : ri(1, 99);
     const val = new Fr(a * ratio + b, ratio);
-    return { html: `${a} ${big} ${b} ${small} = <b class="box">□</b> ${big}`, text: `${a}${big}${b}${small} = □${big}`, slots: [slot(val, big)], explain: () => textFrames(`1 ${big} = ${ratio} ${small} なので、${b} ${small} = ${b} ÷ ${ratio} = ${new Fr(b, ratio).toDec()} ${big}`, `${a} + ${new Fr(b, ratio).toDec()} = ${val.toDec()} ${big}`) };
+    return { html: `${a} ${big} ${b} ${small} = <b class="box">□</b> ${big}`, text: `${a}${big}${b}${small} = □${big}`, slots: [slot(val, big)], explain: () => figFrames(figUnitPlace(big, small, ratio, val), `1 ${big} = ${ratio} ${small} なので、${b} ${small} = ${b} ÷ ${ratio} = ${new Fr(b, ratio).toDec()} ${big}<br><small>表で、${small} の数字が ${big} の小数点より右に入ります。</small>`, `${a} + ${new Fr(b, ratio).toDec()} = ${val.toDec()} ${big}`) };
   }
   const L = ri(1, 9), d = ri(1, 9);
-  return { html: `${L} L ${d} dL = <b class="box">□</b> dL`, text: `${L}L${d}dL = □dL`, slots: [slot(L * 10 + d, 'dL')], explain: () => textFrames('1 L = 10 dL です。', `${L} L = ${L * 10} dL。${L * 10} + ${d} = ${L * 10 + d} dL`) };
+  return { html: `${L} L ${d} dL = <b class="box">□</b> dL`, text: `${L}L${d}dL = □dL`, slots: [slot(L * 10 + d, 'dL')], explain: () => figFrames(figTable(['', 'L', 'dL'], [[`${L} L ${d} dL`, L, d], ['dL だけで', '', `${L} × 10 + ${d} = <b>${L * 10 + d}</b>`]]), '1 L = 10 dL です。', `${L} L = ${L * 10} dL。${L * 10} + ${d} = ${L * 10 + d} dL`) };
 };
 GEN.speed_conv = () => {
   const v = ri(0, 4);
   if (v === 0) { const X = ri(2, 30) * 3; const ans = new Fr(X * 1000, 60); if (!ans.isInt()) return GEN.speed_conv();
-    return { html: `時速 ${X} km = 分速 <b class="box">□</b> m`, text: `時速${X}km = 分速□m`, slots: [slot(ans, 'm')], explain: () => textFrames(`時速 ${X} km は、1時間 (60分) に ${X} km = ${X * 1000} m 進む速さです。`, `1分あたりにすると、${X * 1000} ÷ 60 = ${ans.n} m。分速 ${ans.n} m`) }; }
+    return { html: `時速 ${X} km = 分速 <b class="box">□</b> m`, text: `時速${X}km = 分速□m`, slots: [slot(ans, 'm')], explain: () => figFrames(rateFig('道のり (m)', '時間 (分)', [{ pos: 1, t: String(ans.n), b: '1', ut: true }, { pos: 60, t: String(X * 1000), b: '60' }]), `時速 ${X} km は、1時間 (60分) に ${X} km = ${X * 1000} m 進む速さです。`, `1分あたりにすると、${X * 1000} ÷ 60 = ${ans.n} m。分速 ${ans.n} m`) }; }
   if (v === 1) { const Y = ri(2, 30) * 30; const ans = new Fr(Y, 60);
-    return { html: `分速 ${Y} m = 秒速 <b class="box">□</b> m`, text: `分速${Y}m = 秒速□m`, slots: [slot(ans, 'm')], explain: () => textFrames(`分速 ${Y} m は、1分 (60秒) に ${Y} m 進む速さです。`, `1秒あたりにすると、${Y} ÷ 60 = ${ans.toDec()} m`) }; }
+    return { html: `分速 ${Y} m = 秒速 <b class="box">□</b> m`, text: `分速${Y}m = 秒速□m`, slots: [slot(ans, 'm')], explain: () => figFrames(rateFig('道のり (m)', '時間 (秒)', [{ pos: 1, t: ans.toDec(), b: '1', ut: true }, { pos: 60, t: String(Y), b: '60' }]), `分速 ${Y} m は、1分 (60秒) に ${Y} m 進む速さです。`, `1秒あたりにすると、${Y} ÷ 60 = ${ans.toDec()} m`) }; }
   if (v === 2) { const Z = ri(2, 30); const ans = new Fr(Z * 3600, 1000);
-    return { html: `秒速 ${Z} m = 時速 <b class="box">□</b> km`, text: `秒速${Z}m = 時速□km`, slots: [slot(ans, 'km')], explain: () => textFrames(`1時間 = 60分 = 3600秒 です。`, `1時間に進むのは ${Z} × 3600 = ${Z * 3600} m。`, `${Z * 3600} m = ${ans.toDec()} km。時速 ${ans.toDec()} km`) }; }
+    return { html: `秒速 ${Z} m = 時速 <b class="box">□</b> km`, text: `秒速${Z}m = 時速□km`, slots: [slot(ans, 'km')], explain: () => figFrames(rateFig('道のり', '時間 (秒)', [{ pos: 1, t: `${Z} m`, b: '1' }, { pos: 3600, t: `${ans.toDec()} km`, b: '3600', ut: true }]), `1時間 = 60分 = 3600秒 です。`, `1時間に進むのは ${Z} × 3600 = ${Z * 3600} m。`, `${Z * 3600} m = ${ans.toDec()} km。時速 ${ans.toDec()} km`) }; }
   if (v === 3) { const Y = ri(1, 20) * 50; const ans = new Fr(Y * 60, 1000);
-    return { html: `分速 ${Y} m = 時速 <b class="box">□</b> km`, text: `分速${Y}m = 時速□km`, slots: [slot(ans, 'km')], explain: () => textFrames('1時間 = 60分 です。', `1時間に進むのは ${Y} × 60 = ${Y * 60} m。`, `${Y * 60} m = ${ans.toDec()} km。時速 ${ans.toDec()} km`) }; }
+    return { html: `分速 ${Y} m = 時速 <b class="box">□</b> km`, text: `分速${Y}m = 時速□km`, slots: [slot(ans, 'km')], explain: () => figFrames(rateFig('道のり', '時間 (分)', [{ pos: 1, t: `${Y} m`, b: '1' }, { pos: 60, t: `${ans.toDec()} km`, b: '60', ut: true }]), '1時間 = 60分 です。', `1時間に進むのは ${Y} × 60 = ${Y * 60} m。`, `${Y * 60} m = ${ans.toDec()} km。時速 ${ans.toDec()} km`) }; }
   const X = ri(1, 6) * 18; const ans = new Fr(X * 1000, 3600);
-  return { html: `時速 ${X} km = 秒速 <b class="box">□</b> m`, text: `時速${X}km = 秒速□m`, slots: [slot(ans, 'm')], explain: () => textFrames(`時速 ${X} km は、1時間 (3600秒) に ${X * 1000} m 進む速さです。`, `1秒あたりにすると、${X * 1000} ÷ 3600 = ${ans.toDec()} m。秒速 ${ans.toDec()} m`) };
+  return { html: `時速 ${X} km = 秒速 <b class="box">□</b> m`, text: `時速${X}km = 秒速□m`, slots: [slot(ans, 'm')], explain: () => figFrames(rateFig('道のり (m)', '時間 (秒)', [{ pos: 1, t: ans.toDec(), b: '1', ut: true }, { pos: 3600, t: String(X * 1000), b: '3600' }]), `時速 ${X} km は、1時間 (3600秒) に ${X * 1000} m 進む速さです。`, `1秒あたりにすると、${X * 1000} ÷ 3600 = ${ans.toDec()} m。秒速 ${ans.toDec()} m`) };
 };
+// 二本の数直線 (速さ・単位量あたり): known = [上, 下] の組、ask = [上, 下] の組 (□ はどちらか)
+function rateFig(top, bot, pairs) {
+  // 下の目もりが何倍になったかを、上にも同じ矢印で示す (比例の関係)
+  const arrows = [];
+  const k = pairs.find((p) => !p.ut && !p.ub), u = pairs.find((p) => p.ut);
+  if (k && u && !pairs.some((p) => p.ub)) {
+    const r = u.pos / k.pos; const near = (x) => Math.abs(x - Math.round(x)) < 1e-9;
+    const s = near(r) ? `×${Math.round(r)}` : near(1 / r) ? `÷${Math.round(1 / r)}` : near(r * 10) ? `×${(Math.round(r * 10) / 10)}` : null;
+    if (s) arrows.push({ from: k.pos, to: u.pos, s, side: 'top' }, { from: k.pos, to: u.pos, s, side: 'bot' });
+  }
+  return figDoubleLine({ top, bot, cols: [{ pos: 0, t: '0', b: '0' }, ...pairs.map((p) => ({ pos: p.pos, t: p.t, b: p.b, ut: p.ut, ub: p.ub }))], arrows, label: `${top}と${bot}の二本の数直線` });
+}
 function minText(M) { const h = Math.floor(M / 60), m = M % 60; return h && m ? `${h}時間${m}分` : h ? `${h}時間` : `${m}分`; }
 GEN.speed = () => {
   const v = ri(0, 3);
@@ -944,37 +1203,37 @@ GEN.speed = () => {
     let S, M, D;
     do { S = ri(4, 20) * 5; M = pick([20, 30, 40, 45, 90, 100, 150, 75, 80]); D = new Fr(S * M, 60); } while (D.decPlaces() > 1);
     const H = new Fr(M, 60);
-    return { html: `時速 ${S} km で ${minText(M)} 進むと、道のりは <b class="box">□</b> km`, text: `時速${S}kmで${minText(M)} → □km`, slots: [slot(D, 'km')], explain: () => textFrames('道のり = 速さ × 時間 です。', `速さが「時速」なので、時間を「時間」の単位にそろえます: ${minText(M)} = ${frHTML(H, false)} 時間${H.terminating() ? ` = ${H.toDec()} 時間` : ''}`, `${S} × ${frHTML(H, false)} = ${D.toDec()} km`) };
+    return { html: `時速 ${S} km で ${minText(M)} 進むと、道のりは <b class="box">□</b> km`, text: `時速${S}kmで${minText(M)} → □km`, slots: [slot(D, 'km')], explain: () => figFrames(rateFig('道のり (km)', '時間', [{ pos: 1, t: String(S), b: '1時間' }, { pos: H.val(), t: D.toDec(), b: minText(M), ut: true }]), '道のり = 速さ × 時間 です。二本の数直線で、1時間に ${S} km 進むようすを表します。'.replace('${S}', S), `速さが「時速」なので、時間を「時間」の単位にそろえます: ${minText(M)} = ${frHTML(H, false)} 時間${H.terminating() ? ` = ${H.toDec()} 時間` : ''}`, `${S} × ${frHTML(H, false)} = ${D.toDec()} km`) };
   }
   if (v === 1) {
     let V, D, T;
     do { V = ri(5, 20) * 5; T = ri(8, 40); D = new Fr(V * T, 1000); } while (D.decPlaces() > 2);
-    return { html: `${D.toDec()} km の道のりを 分速 ${V} m で歩くと、<b class="box">□</b> 分かかる`, text: `${D.toDec()}km を分速${V}m → □分`, slots: [slot(T, '分')], explain: () => textFrames('時間 = 道のり ÷ 速さ です。', `速さが「m」なので、道のりも m にそろえます: ${D.toDec()} km = ${V * T} m`, `${V * T} ÷ ${V} = ${T} 分`) };
+    return { html: `${D.toDec()} km の道のりを 分速 ${V} m で歩くと、<b class="box">□</b> 分かかる`, text: `${D.toDec()}km を分速${V}m → □分`, slots: [slot(T, '分')], explain: () => figFrames(rateFig('道のり (m)', '時間 (分)', [{ pos: 1, t: String(V), b: '1' }, { pos: T, t: String(V * T), b: String(T), ub: true }]), '時間 = 道のり ÷ 速さ です。1分に ' + V + ' m 進みます。', `速さが「m」なので、道のりも m にそろえます: ${D.toDec()} km = ${V * T} m`, `${V * T} ÷ ${V} = ${T} 分`) };
   }
   if (v === 2) {
     let D, T, S;
     do { T = pick([20, 30, 40, 45, 15, 90, 120]); S = ri(3, 18) * 5; D = new Fr(S * T, 60); } while (D.decPlaces() > 1);
-    return { html: `${D.toDec()} km を ${minText(T)} で走る車の速さは、時速 <b class="box">□</b> km`, text: `${D.toDec()}kmを${minText(T)} → 時速□km`, slots: [slot(S, 'km')], explain: () => textFrames('速さ = 道のり ÷ 時間 です。', `時速を求めるので、時間を「時間」の単位にそろえます: ${minText(T)} = ${frHTML(new Fr(T, 60), false)} 時間`, `${D.toDec()} ÷ ${frHTML(new Fr(T, 60), false)} = ${S}。時速 ${S} km`, `<small>別の考え方: ${minText(T)}で ${D.toDec()} km → 60分では ${D.toDec()} × 60 ÷ ${T} = ${S} km</small>`) };
+    return { html: `${D.toDec()} km を ${minText(T)} で走る車の速さは、時速 <b class="box">□</b> km`, text: `${D.toDec()}kmを${minText(T)} → 時速□km`, slots: [slot(S, 'km')], explain: () => figFrames(rateFig('道のり (km)', '時間', [{ pos: 60, t: String(S), b: '1時間', ut: true }, { pos: T, t: D.toDec(), b: minText(T) }]), '速さ = 道のり ÷ 時間 です。1時間 (60分) あたりに進む道のりを求めます。', `時速を求めるので、時間を「時間」の単位にそろえます: ${minText(T)} = ${frHTML(new Fr(T, 60), false)} 時間`, `${D.toDec()} ÷ ${frHTML(new Fr(T, 60), false)} = ${S}。時速 ${S} km`, `<small>別の考え方: ${minText(T)}で ${D.toDec()} km → 60分では ${D.toDec()} × 60 ÷ ${T} = ${S} km</small>`) };
   }
   let V, T, D;
   do { V = ri(3, 20) * 10; T = ri(5, 45); D = new Fr(V * T, 1000); } while (D.decPlaces() > 2);
-  return { html: `分速 ${V} m で ${T} 分 進むと、道のりは <b class="box">□</b> km`, text: `分速${V}mで${T}分 → □km`, slots: [slot(D, 'km')], explain: () => textFrames('道のり = 速さ × 時間 です。', `${V} × ${T} = ${V * T} m`, `答えは km なので、${V * T} m = ${D.toDec()} km`) };
+  return { html: `分速 ${V} m で ${T} 分 進むと、道のりは <b class="box">□</b> km`, text: `分速${V}mで${T}分 → □km`, slots: [slot(D, 'km')], explain: () => figFrames(rateFig('道のり (m)', '時間 (分)', [{ pos: 1, t: String(V), b: '1' }, { pos: T, t: String(V * T), b: String(T), ut: true }]), '道のり = 速さ × 時間 です。', `${V} × ${T} = ${V * T} m`, `答えは km なので、${V * T} m = ${D.toDec()} km`) };
 };
 GEN.per_unit = () => {
   const v = ri(0, 2);
   if (v === 0) { const N = pick(['2', '3', '4', '5', '6', '1.5', '2.5', '0.8']); const u = ri(3, 30) * 10; const P = Fr.dec(N).mul(u); if (!P.isInt()) return GEN.per_unit();
-    return { html: `${N} m で ${P.n} 円のリボン。1 m あたりのねだんは <b class="box">□</b> 円`, text: `${N}mで${P.n}円 → 1mあたり□円`, slots: [slot(u, '円')], explain: () => textFrames('1あたりの量 = 全体の量 ÷ いくつ分 です。', `${P.n} ÷ ${N} = ${u} 円`) }; }
+    return { html: `${N} m で ${P.n} 円のリボン。1 m あたりのねだんは <b class="box">□</b> 円`, text: `${N}mで${P.n}円 → 1mあたり□円`, slots: [slot(u, '円')], explain: () => figFrames(rateFig('代金 (円)', '長さ (m)', [{ pos: 1, t: String(u), b: '1', ut: true }, { pos: N, t: String(P.n), b: String(N) }]), '1あたりの量 = 全体の量 ÷ いくつ分 です。数直線で、${N} m から 1 m にもどります。'.replace('${N}', N), `${P.n} ÷ ${N} = ${u} 円`) }; }
   if (v === 1) { const A = ri(4, 40); const dns = ri(5, 90) * 10; const B = A * dns;
-    return { html: `面積 ${A} km² の町に ${B} 人が住んでいます。人口密度 (1 km² あたりの人数) は <b class="box">□</b> 人`, text: `${A}km²に${B}人 → 人口密度□人`, slots: [slot(dns, '人')], explain: () => textFrames('人口密度 = 人数 ÷ 面積 (km²) です。', `${B} ÷ ${A} = ${dns} 人`) }; }
+    return { html: `面積 ${A} km² の町に ${B} 人が住んでいます。人口密度 (1 km² あたりの人数) は <b class="box">□</b> 人`, text: `${A}km²に${B}人 → 人口密度□人`, slots: [slot(dns, '人')], explain: () => figFrames(rateFig('人数 (人)', '面積 (km²)', [{ pos: 1, t: String(dns), b: '1', ut: true }, { pos: A, t: String(B), b: String(A) }]), '人口密度 = 人数 ÷ 面積 (km²) です。1 km² あたりの人数を求めます。', `${B} ÷ ${A} = ${dns} 人`) }; }
   const L = ri(5, 40); const k = ri(8, 25); const D = L * k;
-  return { html: `ガソリン ${L} L で ${D} km 走る車。1 L あたり <b class="box">□</b> km 走る`, text: `${L}Lで${D}km → 1Lあたり□km`, slots: [slot(k, 'km')], explain: () => textFrames('1 L あたりの道のり = 道のり ÷ ガソリンの量 です。', `${D} ÷ ${L} = ${k} km`) };
+  return { html: `ガソリン ${L} L で ${D} km 走る車。1 L あたり <b class="box">□</b> km 走る`, text: `${L}Lで${D}km → 1Lあたり□km`, slots: [slot(k, 'km')], explain: () => figFrames(rateFig('道のり (km)', 'ガソリン (L)', [{ pos: 1, t: String(k), b: '1', ut: true }, { pos: L, t: String(D), b: String(L) }]), '1 L あたりの道のり = 道のり ÷ ガソリンの量 です。', `${D} ÷ ${L} = ${k} km`) };
 };
 GEN.per_total = () => {
   const v = ri(0, 1);
   if (v === 0) { const u = ri(4, 40) * 5; const N = pick(['2.4', '3.5', '1.2', '0.6', '4', '2.5', '1.8']); const P = Fr.dec(N).mul(u); if (!P.isInt()) return GEN.per_total();
-    return { html: `1 m あたり ${u} 円のロープを ${N} m 買うと、代金は <b class="box">□</b> 円`, text: `1mあたり${u}円 × ${N}m → □円`, slots: [slot(P, '円')], explain: () => textFrames('全体の量 = 1あたりの量 × いくつ分 です。', `${u} × ${N} = ${P.n} 円`) }; }
+    return { html: `1 m あたり ${u} 円のロープを ${N} m 買うと、代金は <b class="box">□</b> 円`, text: `1mあたり${u}円 × ${N}m → □円`, slots: [slot(P, '円')], explain: () => figFrames(rateFig('代金 (円)', '長さ (m)', [{ pos: 1, t: String(u), b: '1' }, { pos: Fr.dec(String(N)).val(), t: String(P.n), b: String(N), ut: true }]), '全体の量 = 1あたりの量 × いくつ分 です。', `${u} × ${N} = ${P.n} 円`) }; }
   const u = ri(4, 40) * 5; const N = pick(['2.4', '3.5', '1.2', '0.6', '4', '2.5', '1.8', '6']); const P = Fr.dec(N).mul(u); if (!P.isInt()) return GEN.per_total();
-  return { html: `1 m あたり ${u} 円のロープを ${P.n} 円分買うと、長さは <b class="box">□</b> m`, text: `1mあたり${u}円で${P.n}円分 → □m`, slots: [slot(Fr.dec(N), 'm')], explain: () => textFrames('いくつ分 = 全体の量 ÷ 1あたりの量 です。', `${P.n} ÷ ${u} = ${N} m`) };
+  return { html: `1 m あたり ${u} 円のロープを ${P.n} 円分買うと、長さは <b class="box">□</b> m`, text: `1mあたり${u}円で${P.n}円分 → □m`, slots: [slot(Fr.dec(N), 'm')], explain: () => figFrames(rateFig('代金 (円)', '長さ (m)', [{ pos: 1, t: String(u), b: '1' }, { pos: Fr.dec(String(N)).val(), t: String(P.n), b: String(N), ub: true }]), 'いくつ分 = 全体の量 ÷ 1あたりの量 です。', `${P.n} ÷ ${u} = ${N} m`) };
 };
 GEN.compare = () => {
   const v = ri(0, 1);
@@ -984,12 +1243,12 @@ GEN.compare = () => {
     const ans = r1.cmp(r2) > 0 ? 'A' : 'B';
     const fmtR = (r) => (r.decPlaces() <= 3 ? r.toDec() : (Math.floor(r.val() * 1000) / 1000).toFixed(3) + '…');
     const d1 = fmtR(r1), d2 = fmtR(r2);
-    return { html: `A の部屋: ${a1} m² に ${p1} 人<br>B の部屋: ${a2} m² に ${p2} 人`, text: `A:${a1}m²に${p1}人 / B:${a2}m²に${p2}人`, lead: 'こんでいるのはどちら？', choices: [{ id: 'A', html: 'A の部屋' }, { id: 'B', html: 'B の部屋' }], answerChoice: ans, slots: [], explain: () => textFrames('面積も人数もちがうので、「1 m² あたりの人数」にそろえてくらべます。', `A: ${p1} ÷ ${a1} = ${d1} 人<br>B: ${p2} ÷ ${a2} = ${d2} 人`, `1 m² あたりの人数が多い ${ans} のほうがこんでいます。<br><small>「1人あたりの面積」でくらべることもできます。その場合は、面積が小さいほうがこんでいます。</small>`) };
+    return { html: `A の部屋: ${a1} m² に ${p1} 人<br>B の部屋: ${a2} m² に ${p2} 人`, text: `A:${a1}m²に${p1}人 / B:${a2}m²に${p2}人`, lead: 'こんでいるのはどちら？', choices: [{ id: 'A', html: 'A の部屋' }, { id: 'B', html: 'B の部屋' }], answerChoice: ans, slots: [], explain: () => figFrames(figTable(['', '面積 (m²)', '人数 (人)', '1 m² あたり (人)'], [['A', a1, p1, `<b>${d1}</b>`], ['B', a2, p2, `<b>${d2}</b>`]]) + figBars([{ s: 'A', v: r1.val(), label: d1 }, { s: 'B', v: r2.val(), label: d2, cls: 'sh3' }], ' 人/m²'), '面積も人数もちがうので、表のいちばん右の列「1 m² あたりの人数」にそろえてくらべます。', `A: ${p1} ÷ ${a1} = ${d1} 人<br>B: ${p2} ÷ ${a2} = ${d2} 人`, `1 m² あたりの人数が多い ${ans} のほうがこんでいます。<br><small>「1人あたりの面積」でくらべることもできます。その場合は、面積が小さいほうがこんでいます。</small>`) };
   }
   let n1, y1, n2, y2, r1, r2;
   do { n1 = ri(2, 6); n2 = ri(2, 8); y1 = n1 * ri(30, 120); y2 = n2 * ri(30, 120); r1 = new Fr(y1, n1); r2 = new Fr(y2, n2); } while (r1.cmp(r2) === 0 || n1 === n2);
   const ans = r1.cmp(r2) < 0 ? 'A' : 'B';
-  return { html: `A: えんぴつ ${n1} 本で ${y1} 円<br>B: えんぴつ ${n2} 本で ${y2} 円`, text: `A:${n1}本${y1}円 / B:${n2}本${y2}円`, lead: '1本あたりが安いのはどちら？', choices: [{ id: 'A', html: 'A' }, { id: 'B', html: 'B' }], answerChoice: ans, slots: [], explain: () => textFrames('本数がちがうので、「1本あたりのねだん」にそろえてくらべます。', `A: ${y1} ÷ ${n1} = ${r1.n} 円<br>B: ${y2} ÷ ${n2} = ${r2.n} 円`, `1本あたりが安いのは ${ans} です。`) };
+  return { html: `A: えんぴつ ${n1} 本で ${y1} 円<br>B: えんぴつ ${n2} 本で ${y2} 円`, text: `A:${n1}本${y1}円 / B:${n2}本${y2}円`, lead: '1本あたりが安いのはどちら？', choices: [{ id: 'A', html: 'A' }, { id: 'B', html: 'B' }], answerChoice: ans, slots: [], explain: () => figFrames(figTable(['', '本数', '代金 (円)', '1本あたり (円)'], [['A', n1, y1, `<b>${r1.n}</b>`], ['B', n2, y2, `<b>${r2.n}</b>`]]) + figBars([{ s: 'A', v: r1.val(), label: String(r1.n) }, { s: 'B', v: r2.val(), label: String(r2.n), cls: 'sh3' }], ' 円'), '本数がちがうので、表のいちばん右の列「1本あたりのねだん」にそろえてくらべます。', `A: ${y1} ÷ ${n1} = ${r1.n} 円<br>B: ${y2} ÷ ${n2} = ${r2.n} 円`, `1本あたりが安いのは ${ans} です。`) };
 };
 
 function makeProblem(type, level) {

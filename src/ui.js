@@ -1,7 +1,6 @@
 // ===== 保存 =====
 const LS_KEY = 'keisan-tani-v1';
 const SESSION_LEN = 10;
-const UNLOCK_NEED = 8; // ステップの10問のうち
 function freshState() {
   return { v: 2, updatedAt: 0, unlocked: { A1: true, B1: true }, best: {}, mistakes: {}, typeStats: {}, sessions: [] };
 }
@@ -65,29 +64,20 @@ async function saveRemote(session) {
 }
 
 // ===== 出題の選び方 =====
-const unlockedStages = () => Object.keys(STAGES).filter((s) => state.unlocked[s]);
-function frontier(track) { const u = TRACKS[track].stages.filter((s) => state.unlocked[s]); return u[u.length - 1]; }
-function weightedStage() {
-  const list = [];
-  for (const t of Object.keys(TRACKS)) {
-    const f = frontier(t);
-    TRACKS[t].stages.filter((s) => state.unlocked[s]).forEach((s) => list.push([s, s === f ? 3 : 1]));
-  }
-  let sum = list.reduce((a, b) => a + b[1], 0), x = rnd() * sum;
-  for (const [s, w] of list) { if ((x -= w) < 0) return s; }
-  return list[0][0];
-}
+// どのステップも最初から選べる (順番の決まりはない)
+const allStages = () => Object.keys(STAGES);
 // mistakes のキーは "種類:レベル" (レベルのないステップは 0)
 const missKey = (type, level) => `${type}:${level || 0}`;
 function splitMiss(k) { const [type, lv] = k.split(':'); return { type, level: +lv || null }; }
 function missLabel(k) { const { type, level } = splitMiss(k); return TYPE_NAMES[type] + (level ? ` (レベル${level})` : ''); }
 // 1回の10問: レベルのあるステップは 1問ごとに LEVEL_RAMP にそってむずかしくなる
-function planSession(mode) {
-  const allowed = mode === 'auto' ? unlockedStages() : [mode];
+// fixedLv があれば そのレベルだけ10問
+function planSession(mode, fixedLv) {
+  const allowed = mode === 'auto' ? allStages() : [mode];
   const plan = [];
   for (let i = 0; i < SESSION_LEN; i++) {
-    const st = mode === 'auto' ? weightedStage() : mode;
-    const level = STAGES[st].levels ? LEVEL_RAMP[i] : null;
+    const st = mode === 'auto' ? pick(allowed) : mode;
+    const level = STAGES[st].levels ? (fixedLv || LEVEL_RAMP[i]) : null;
     plan.push({ type: pick(levelTypes(st, level)), level });
   }
   // 前にまちがえた種類を、同じレベルの位置に入れる (最大3問)
@@ -95,7 +85,8 @@ function planSession(mode) {
     .sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k]) => splitMiss(k));
   const used = new Set();
   for (const m of miss) {
-    let idx = m.level ? LEVEL_RAMP.findIndex((lv, i) => lv === m.level && !used.has(i)) : -1;
+    if (fixedLv && m.level !== fixedLv) continue;
+    let idx = m.level ? plan.findIndex((x, i) => x.level === m.level && !used.has(i)) : -1;
     if (idx < 0 && !m.level) { const free = plan.map((x, i) => i).filter((i) => !used.has(i) && !plan[i].level); idx = free.length ? pick(free) : -1; }
     if (idx < 0) continue;
     used.add(idx); plan[idx] = { type: m.type, level: m.level };
@@ -107,8 +98,9 @@ function planSession(mode) {
 // ===== 練習の状態 =====
 let view = 'home';
 let sess = null; // {id, mode, plan:[{type, extra}], idx, items:[], startedAt, problem, inputs, active, phase, t0, sideTab, frame, hint}
-function startSession(mode) {
-  sess = { id: 's' + Date.now().toString(36) + Math.floor(rnd() * 1e4).toString(36), mode, plan: planSession(mode), idx: 0, items: [], startedAt: Date.now() };
+function startSession(mode, fixedLv) {
+  fixedLv = fixedLv ? +fixedLv : null;
+  sess = { id: 's' + Date.now().toString(36) + Math.floor(rnd() * 1e4).toString(36), mode, fixedLv, plan: planSession(mode, fixedLv), idx: 0, items: [], startedAt: Date.now() };
   view = 'practice';
   nextProblem(true);
 }
@@ -177,24 +169,25 @@ function oneMore() {
   sess.plan.splice(sess.idx + 1, 0, { type: sess.problem.type, level: sess.problem.level, extra: true });
   nextProblem();
 }
-const nextStageOf = (s) => { const order = TRACKS[STAGES[s].track].stages; return order[order.indexOf(s) + 1]; };
-// ステップをえらんだ10問を全部答えたときだけ、点数を記録し、8問以上なら次のステップをひらく
+// 練習の名前と、いちばんよい点を記録するキー
+const sessKey = (mode, lv) => (lv ? `${mode}:${lv}` : mode);
+function sessLabel(mode, lv) { if (mode === 'auto') return 'おまかせ'; return `${mode} ${STAGES[mode] ? STAGES[mode].name : ''}${lv ? ` レベル${lv}` : STAGES[mode] && STAGES[mode].levels ? ' (レベル1→5)' : ''}`; }
+// ステップをえらんだ10問を全部答えたときだけ、いちばんよい点を記録する
 function judgeStage() {
   if (sess.mode === 'auto') return;
   const main = sess.items.filter((x) => !x.extra);
   if (main.length < SESSION_LEN) return;
   const c = main.filter((x) => x.ok).length;
-  const b = state.best[sess.mode];
-  if (!b || c > b.c) state.best[sess.mode] = { c, n: SESSION_LEN };
-  sess.stageScore = c;
-  const nx = nextStageOf(sess.mode);
-  if (nx && c >= UNLOCK_NEED && !state.unlocked[nx]) { state.unlocked[nx] = true; sess.unlockedNow = [nx]; }
+  const k = sessKey(sess.mode, sess.fixedLv);
+  const b = state.best[k];
+  sess.prevBest = b ? b.c : null;
+  if (!b || c > b.c) state.best[k] = { c, n: SESSION_LEN };
 }
 function finishSession(quit) {
   if (!sess) return;
   if (!quit) judgeStage();
   if (sess.items.length) {
-    const s = { id: sess.id, mode: sess.mode, startedAt: sess.startedAt, endedAt: Date.now(), n: sess.items.length, c: sess.items.filter((x) => x.ok).length, items: sess.items, quit: !!quit };
+    const s = { id: sess.id, mode: sess.mode, lv: sess.fixedLv || undefined, startedAt: sess.startedAt, endedAt: Date.now(), n: sess.items.length, c: sess.items.filter((x) => x.ok).length, items: sess.items, quit: !!quit };
     state.sessions.unshift(s); state.sessions = state.sessions.slice(0, 60);
     state.updatedAt = Date.now();
     saveLocal();
@@ -219,20 +212,24 @@ function dotsHTML(arr, total = 10) {
   for (let i = 0; i < total; i++) s += `<i class="${arr[i] === 1 ? 'ok' : arr[i] === 0 ? 'ng' : ''}"></i>`;
   return s + '</span>';
 }
-function bestText(s) { const b = state.best[s]; return b ? `いちばんよい点: ${b.c} / ${b.n}` : 'まだ10問やっていません'; }
+function bestText(k) { const b = state.best[k]; return b ? `${b.c}/${b.n}` : ''; }
 function homeHTML() {
   const miss = Object.entries(state.mistakes).filter(([, n]) => n > 0).map(([k]) => missLabel(k));
-  let h = `<section class="hero grid-bg"><div><h1>きょうの れんしゅう</h1><p>ステップをえらぶと、1回 10問。<b>1問ごとに少しずつむずかしくなります</b> (レベル1 → 5)。</p><p>10問中 ${UNLOCK_NEED}問以上 正解すると、次のステップが ひらきます。わからないときは「しくみを見る」で、考え方を1つずつ見られます。</p>${miss.length ? `<p>前にまちがえた問題も入ります: ${miss.slice(0, 3).join('、')}${miss.length > 3 ? ' ほか' : ''}</p>` : ''}</div><div class="hero-act"><button class="btn btn-main" data-act="start" data-v="auto">おまかせで はじめる</button><span class="sub">ひらいているステップから まぜて出します</span></div></section><div class="tracks">`;
+  let h = `<section class="hero grid-bg"><div><h1>きょうの れんしゅう</h1><p>やりたいところを、すきな順番で えらべます。1回 10問です。</p><p>「1→5」は 1問ごとに少しずつむずかしくなる10問、「レベル○」は そのレベルだけの10問です。わからないときは「しくみを見る」で、図を見ながら考え方を1つずつ見られます。</p>${miss.length ? `<p>前にまちがえた問題も入ります: ${miss.slice(0, 3).join('、')}${miss.length > 3 ? ' ほか' : ''}</p>` : ''}</div><div class="hero-act"><button class="btn btn-main" data-act="start" data-v="auto">おまかせで はじめる</button><span class="sub">ぜんぶのステップから まぜて出します</span></div></section><div class="tracks">`;
   for (const t of Object.keys(TRACKS)) {
     const T = TRACKS[t];
     h += `<section class="track"><h2>${t}. ${T.name}</h2>`;
-    T.stages.forEach((s, i) => {
-      const on = state.unlocked[s]; const prev = T.stages[i - 1]; const nx = T.stages[i + 1]; const St = STAGES[s];
-      const lv = St.levels ? `<ol class="lvls">${Object.entries(St.levels).map(([n, l]) => `<li><span class="lvn">レベル${n}</span>${l.name}</li>`).join('')}</ol>` : `<div class="sub">${[...new Set(St.types)].map((x) => TYPE_NAMES[x]).join('・')}</div>`;
-      let rule;
-      if (!on) rule = `<span>${prev}「${STAGES[prev].name}」の10問で ${UNLOCK_NEED}問以上 正解すると ひらきます</span>`;
-      else rule = `<span>${bestText(s)}</span>${nx && !state.unlocked[nx] ? `<span>${UNLOCK_NEED}問以上 正解で ${nx} が ひらきます</span>` : ''}`;
-      h += `<div class="stage${on ? '' : ' locked'}"><span class="code">${s}</span><div><div class="nm">${St.name}</div><div class="sub rule">${rule}</div>${lv}</div>${on ? `<button class="btn btn-sub" data-act="start" data-v="${s}">これをやる</button>` : '<span></span>'}</div>`;
+    T.stages.forEach((s) => {
+      const St = STAGES[s];
+      let body, acts;
+      if (St.levels) {
+        body = `<ol class="lvls">${Object.entries(St.levels).map(([n, l]) => `<li><button class="lvbtn" data-act="start" data-v="${s}" data-lv="${n}"><span class="lvn">レベル${n}</span><span class="lvt">${l.name}</span>${bestText(`${s}:${n}`) ? `<span class="best">${bestText(`${s}:${n}`)}</span>` : ''}</button></li>`).join('')}</ol>`;
+        acts = `<button class="btn btn-sub" data-act="start" data-v="${s}">1→5 で10問</button>${bestText(s) ? `<span class="best">いちばんよい点 ${bestText(s)}</span>` : ''}`;
+      } else {
+        body = `<div class="sub">${[...new Set(St.types)].map((x) => TYPE_NAMES[x]).join('・')}</div>`;
+        acts = `<button class="btn btn-sub" data-act="start" data-v="${s}">これをやる</button>${bestText(s) ? `<span class="best">いちばんよい点 ${bestText(s)}</span>` : ''}`;
+      }
+      h += `<div class="stage"><span class="code">${s}</span><div><div class="nm">${St.name}</div>${body}</div><div class="stage-acts">${acts}</div></div>`;
     });
     h += '</section>';
   }
@@ -259,7 +256,7 @@ function practiceHTML() {
   });
   dots += '</span>';
   let left = `<div class="pbar">${dots}<span class="count">${isExtra ? 'もう1問 (同じレベル)' : `${doneMain + 1} / ${main} 問目`}</span><button class="btn btn-line" data-act="quit" style="padding:8px 14px;font-size:.9rem">やめる</button></div>`;
-  if (sess.idx === 0 && p.level) left += `<p class="pnote">1問ごとに少しずつ むずかしくなります (レベル1 → 5)。${sess.mode === 'auto' ? '' : `10問中 ${UNLOCK_NEED}問以上 正解で 次のステップが ひらきます。`}</p>`;
+  if (sess.idx === 0 && p.level) left += `<p class="pnote">${sess.fixedLv ? `レベル${sess.fixedLv} の問題を 10問 やります。` : '1問ごとに少しずつ むずかしくなります (レベル1 → 5)。'}</p>`;
   const lvInfo = p.level ? STAGES[p.stage].levels[p.level] : null;
   left += `<div class="qcard"><div class="qmeta"><span class="code">${p.stage}</span>${p.level ? `<span class="lvchip">レベル ${p.level} / 5</span>` : ''}<span>${TYPE_NAMES[p.type]}</span>${lvInfo ? `<span class="lvname">${lvInfo.name}</span>` : ''}</div>`;
   if (p.lead) left += `<div class="lead">${p.lead}</div>`;
@@ -304,7 +301,7 @@ function practiceHTML() {
     right += '<div class="explain"><p class="ex-empty">答えたあとに、考え方を1つずつ見られます。</p></div>';
   } else {
     const fs = frames(); const f = fs[sess.frame];
-    right += `<div class="explain"><div class="ex-nav"><button class="btn btn-line" data-act="fprev" ${sess.frame === 0 ? 'disabled' : ''}>まえ</button><button class="btn btn-sub" data-act="fnext" ${sess.frame >= fs.length - 1 ? 'disabled' : ''}>つぎ</button><span class="count">${sess.frame + 1} / ${fs.length}</span></div>${f.grid ? `<div class="ex-scroll">${gridHTML(f.grid, { div: f.div })}</div>` : ''}<div class="ex-step">${f.text}</div></div>`;
+    right += `<div class="explain"><div class="ex-nav"><button class="btn btn-line" data-act="fprev" ${sess.frame === 0 ? 'disabled' : ''}>まえ</button><button class="btn btn-sub" data-act="fnext" ${sess.frame >= fs.length - 1 ? 'disabled' : ''}>つぎ</button><span class="count">${sess.frame + 1} / ${fs.length}</span></div>${f.fig ? `<div class="fig ex-scroll">${f.fig}</div>` : ''}${f.grid ? `<div class="ex-scroll">${gridHTML(f.grid, { div: f.div })}</div>` : ''}<div class="ex-step">${f.text}</div></div>`;
   }
   right += '</aside>';
   return `<div class="practice"><div class="col">${left}</div>${right}</div>`;
@@ -313,15 +310,12 @@ function resultHTML() {
   const s = sess.saved || { n: 0, c: 0, items: [] };
   const mins = Math.max(1, Math.round((s.endedAt - s.startedAt) / 60000));
   let h = `<section class="result"><div class="score"><span class="big">${s.c} / ${s.n}</span><span>正解 (${mins}分)</span></div>`;
-  (sess.unlockedNow || []).forEach((st) => { h += `<div class="banner">${st}「${STAGES[st].name}」が ひらきました。</div>`; });
-  if (sess.mode !== 'auto' && sess.stageScore !== undefined && !(sess.unlockedNow || []).length) {
-    const nx = nextStageOf(sess.mode);
-    if (nx && !state.unlocked[nx]) h += `<p class="note">あと ${UNLOCK_NEED - sess.stageScore}問 正解すると ${nx}「${STAGES[nx].name}」が ひらきます。もう1回 ${sess.mode} をやってみよう。</p>`;
-  }
+  h += `<p class="note">${sessLabel(sess.mode, sess.fixedLv)}</p>`;
+  if (sess.prevBest !== undefined && sess.prevBest !== null && s.c > sess.prevBest) h += `<div class="banner">いちばんよい点を更新しました (${sess.prevBest} → ${s.c})。</div>`;
   const wrongTypes = [...new Set(s.items.filter((x) => !x.ok).map((x) => TYPE_NAMES[x.type] + (x.level ? ` (レベル${x.level})` : '')))];
   if (wrongTypes.length) h += `<p class="note">次の練習では、${wrongTypes.join('、')} を多めに出します。</p>`;
   h += '<div class="list">' + s.items.map((x) => `<div class="li"><span class="m ${x.ok ? 'ok' : 'ng'}">${x.ok ? '○' : '–'}</span><span class="qq">${x.level ? `<span class="lvchip">Lv${x.level}</span> ` : ''}${esc(x.q)}${x.extra ? ' <span class="pill">もう1問</span>' : ''}</span><span class="aa">${x.ok ? esc(x.answer) : `答え ${esc(x.answer)}<br>入力 ${esc(x.given)}`}</span></div>`).join('') + '</div>';
-  h += `<div class="fb-actions"><button class="btn btn-main" data-act="start" data-v="${sess.mode}">もう1回 ${sess.mode === 'auto' ? 'おまかせ' : sess.mode}</button><button class="btn btn-line" data-act="tab" data-v="home">はじめの画面へ</button></div></section>`;
+  h += `<div class="fb-actions"><button class="btn btn-main" data-act="start" data-v="${sess.mode}"${sess.fixedLv ? ` data-lv="${sess.fixedLv}"` : ''}>もう1回 同じ練習</button><button class="btn btn-line" data-act="tab" data-v="home">はじめの画面へ</button></div></section>`;
   return h;
 }
 function fmtDate(t) { const d = new Date(t); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
@@ -330,7 +324,7 @@ let copyState = null; // null | 'ok' | 'manual'
 function exportText() {
   const sessions = state.sessions.slice(0, 30).map((s) => ({ at: new Date(s.endedAt).toISOString(), mode: s.mode, n: s.n, c: s.c, min: Math.round((s.endedAt - s.startedAt) / 6000) / 10, quit: s.quit || undefined,
     items: s.items.map((x) => [x.type + (x.level ? ':' + x.level : ''), x.ok ? 1 : 0, x.hint ? 1 : 0, Math.round(x.ms / 1000), x.q, x.given, x.answer]) }));
-  return '計算と単位の練習帳 記録\n' + JSON.stringify({ v: 2, exportedAt: new Date().toISOString(), unlocked: state.unlocked, best: state.best, mistakes: state.mistakes, typeStats: state.typeStats, itemsFormat: ['type', 'ok', 'hint', 'sec', 'q', 'given', 'answer'], sessions });
+  return '計算と単位の練習帳 記録\n' + JSON.stringify({ v: 2, exportedAt: new Date().toISOString(), best: state.best, mistakes: state.mistakes, typeStats: state.typeStats, itemsFormat: ['type', 'ok', 'hint', 'sec', 'q', 'given', 'answer'], sessions });
 }
 function parentHTML() {
   const all = Object.values(state.typeStats).reduce((a, s) => ({ n: a.n + s.n, c: a.c + s.c }), { n: 0, c: 0 });
@@ -339,18 +333,18 @@ function parentHTML() {
   const lastS = state.sessions[0];
   let h = `<section class="parent"><div><h1 style="font-size:1.6rem">きろく</h1><p class="store">保存先: この端末のブラウザ${dbStatus === 'on' ? '、claude.ai (同じアカウントなら別の端末でも記録が続きます)' : dbStatus === 'error' ? '。claude.ai への保存に失敗しました。この端末には保存されています' : dbStatus === 'checking' ? ' (claude.ai への接続を確認中)' : 'のみ。別の端末とは共有されないため、こまめに「記録をコピー」で送ってください'}</p></div>`;
   h += `<div class="tiles"><div class="tile"><div class="k">この7日間の問題数</div><div class="v">${week}</div></div><div class="tile"><div class="k">これまでの正答率</div><div class="v">${all.n ? Math.round(all.c / all.n * 100) + '%' : '–'}</div></div><div class="tile"><div class="k">これまでの問題数</div><div class="v">${all.n}</div></div><div class="tile"><div class="k">最後の練習</div><div class="v" style="font-size:1.2rem">${lastS ? fmtDate(lastS.endedAt) : '–'}</div></div></div>`;
-  h += `<div class="sec"><h2>段階</h2><p class="note">ステップをえらんだ10問 (レベル1→5) で ${UNLOCK_NEED}問以上 正解すると、次のステップがひらきます。おまかせの練習ではひらきません。ここから手動でひらく・とじることもできます。</p><div class="tbl-wrap"><table><thead><tr><th>段階</th><th>内容</th><th>状態</th><th>いちばんよい点</th><th></th></tr></thead><tbody>`;
+  h += `<div class="sec"><h2>ステップ</h2><p class="note">どのステップもすきな順番で選べます。点は、10問を最後まで答えたときの いちばんよい点です。</p><div class="tbl-wrap"><table><thead><tr><th>ステップ</th><th>内容</th><th>ステップ全体の10問</th><th>レベル別 (1〜5)</th></tr></thead><tbody>`;
   for (const s of Object.keys(STAGES)) {
     const b = state.best[s];
-    const base = s === 'A1' || s === 'B1';
-    h += `<tr><td><span class="code">${s}</span></td><td>${STAGES[s].name}</td><td><span class="pill${state.unlocked[s] ? ' on' : ''}">${state.unlocked[s] ? 'ひらいている' : 'まだ'}</span></td><td>${b ? `${b.c} / ${b.n}` : '–'}</td><td>${base ? '' : `<button class="btn btn-line" style="padding:6px 12px;font-size:.85rem" data-act="toggle" data-v="${s}">${state.unlocked[s] ? 'とじる' : 'ひらく'}</button>`}</td></tr>`;
+    const lvs = STAGES[s].levels ? Object.keys(STAGES[s].levels).map((n) => bestText(`${s}:${n}`) || '–').join(' / ') : '';
+    h += `<tr><td><span class="code">${s}</span></td><td>${STAGES[s].name}</td><td>${b ? `${b.c} / ${b.n}` : '–'}</td><td>${lvs}</td></tr>`;
   }
   h += '</tbody></table></div></div>';
   const rows = Object.keys(TYPE_NAMES).map((t) => ({ t, s: state.typeStats[t] })).filter((x) => x.s && x.s.n).sort((a, b) => a.s.c / a.s.n - b.s.c / b.s.n);
   h += `<div class="sec"><h2>種類ごとの正答率 (低い順)</h2>`;
   if (!rows.length) h += '<p class="note">まだ記録がありません。練習すると、ここに種類ごとの正答率が出ます。</p>';
   else {
-    h += '<div class="tbl-wrap"><table><thead><tr><th>種類</th><th>段階</th><th>回数</th><th>正答率</th><th>先にしくみを見た</th><th>次回多めに出す</th></tr></thead><tbody>';
+    h += '<div class="tbl-wrap"><table><thead><tr><th>種類</th><th>ステップ</th><th>回数</th><th>正答率</th><th>先にしくみを見た</th><th>次回多めに出す</th></tr></thead><tbody>';
     rows.forEach(({ t, s }) => { const r = Math.round(s.c / s.n * 100); h += `<tr><td>${TYPE_NAMES[t]}</td><td>${stageOfType(t)}</td><td class="num">${s.n}</td><td><span class="bar${r < 70 ? ' low' : ''}"><i style="width:${r}%"></i></span>${r}%</td><td class="num">${s.hint}</td><td>${Object.keys(state.mistakes).some((k) => k.startsWith(t + ':')) ? '<span class="pill">はい</span>' : ''}</td></tr>`; });
     h += '</tbody></table></div>';
   }
@@ -358,11 +352,11 @@ function parentHTML() {
   if (!state.sessions.length) h += '<p class="note">まだ記録がありません。</p>';
   state.sessions.slice(0, 20).forEach((s) => {
     const mins = Math.max(1, Math.round((s.endedAt - s.startedAt) / 60000));
-    h += `<details class="sess"><summary><span>${fmtDate(s.endedAt)}</span><span>${s.mode === 'auto' ? 'おまかせ' : s.mode + ' ' + STAGES[s.mode].name}</span><span>${s.c} / ${s.n} 正解</span><span>${mins}分</span>${s.quit ? '<span class="pill">途中でやめた</span>' : ''}</summary><div class="list" style="border:0;border-top:1px solid var(--rule);border-radius:0">${s.items.map((x) => `<div class="li"><span class="m ${x.ok ? 'ok' : 'ng'}">${x.ok ? '○' : '–'}</span><span class="qq">${esc(x.q)}${x.hint ? ' <span class="pill">しくみ</span>' : ''}</span><span class="aa">${x.ok ? `${Math.round(x.ms / 1000)}秒` : `答え ${esc(x.answer)} / 入力 ${esc(x.given)}`}</span></div>`).join('')}</div></details>`;
+    h += `<details class="sess"><summary><span>${fmtDate(s.endedAt)}</span><span>${sessLabel(s.mode, s.lv)}</span><span>${s.c} / ${s.n} 正解</span><span>${mins}分</span>${s.quit ? '<span class="pill">途中でやめた</span>' : ''}</summary><div class="list" style="border:0;border-top:1px solid var(--rule);border-radius:0">${s.items.map((x) => `<div class="li"><span class="m ${x.ok ? 'ok' : 'ng'}">${x.ok ? '○' : '–'}</span><span class="qq">${esc(x.q)}${x.hint ? ' <span class="pill">しくみ</span>' : ''}</span><span class="aa">${x.ok ? `${Math.round(x.ms / 1000)}秒` : `答え ${esc(x.answer)} / 入力 ${esc(x.given)}`}</span></div>`).join('')}</div></details>`;
   });
   h += '</div>';
   h += `<div class="sec"><h2>記録を Claude に送る</h2><p class="note">ボタンをおすと記録がコピーされます。プロジェクトのスレッドに貼り付けて送ってください。次の改善に使います。</p><div class="fb-actions"><button class="btn btn-sub" data-act="copy">記録をコピー</button>${copyState === 'ok' ? '<span class="pill on" role="status">コピーしました</span>' : ''}</div>${copyState === 'manual' ? '<p class="note" role="status">自動でコピーできませんでした。下の文字を全部選んでコピーしてください。</p><textarea id="export-box" readonly style="width:100%;min-height:140px;font-family:var(--f-mono);font-size:.8rem;background:var(--paper);color:var(--ink);border:1px solid var(--rule);border-radius:8px;padding:8px">' + esc(exportText()) + '</textarea>' : ''}</div>`;
-  h += `<div class="sec"><h2>データ</h2><div class="danger">${confirmReset ? '<span>この端末と claude.ai の段階・正答率をリセットします。練習の記録一覧は残ります。</span><button class="btn btn-danger" data-act="reset-yes">リセットする</button><button class="btn btn-line" data-act="reset-no">やめる</button>' : '<button class="btn btn-line" data-act="reset">段階と正答率をリセット</button>'}</div></div>`;
+  h += `<div class="sec"><h2>データ</h2><div class="danger">${confirmReset ? '<span>この端末と claude.ai のいちばんよい点・正答率をリセットします。練習の記録一覧は残ります。</span><button class="btn btn-danger" data-act="reset-yes">リセットする</button><button class="btn btn-line" data-act="reset-no">やめる</button>' : '<button class="btn btn-line" data-act="reset">いちばんよい点と正答率をリセット</button>'}</div></div>`;
   return h + '</section>';
 }
 function render() {
@@ -444,7 +438,7 @@ document.addEventListener('click', (e) => {
   const b = e.target.closest('[data-act]'); if (!b) return;
   const a = b.dataset.act, v = b.dataset.v;
   if (a === 'tab') { if (view === 'practice' && sess && sess.phase) { finishSession(true); } view = v; confirmReset = false; copyState = null; render(); window.scrollTo(0, 0); }
-  else if (a === 'start') { startSession(v); window.scrollTo(0, 0); }
+  else if (a === 'start') { startSession(v, b.dataset.lv); window.scrollTo(0, 0); }
   else if (a === 'key') typeKey(v);
   else if (a === 'slot') { if (sess.phase === 'answer') { sess.active = +v; render(); } }
   else if (a === 'choose') { sess.choice = v; sess.msg = null; render(); }
@@ -458,7 +452,6 @@ document.addEventListener('click', (e) => {
   else if (a === 'clear') { if (memo) memo.clear(); }
   else if (a === 'finger') { state.finger = !state.finger; saveLocal(); render(); }
   else if (a === 'quit') finishSession(true);
-  else if (a === 'toggle') { state.unlocked[v] = !state.unlocked[v]; state.updatedAt = Date.now(); saveLocal(); saveRemote(); render(); }
   else if (a === 'copy') {
     const txt = exportText();
     const manual = () => { copyState = 'manual'; render(); const t = document.getElementById('export-box'); if (t) { t.focus(); t.select(); } };

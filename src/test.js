@@ -14,6 +14,8 @@ for (const [t, lv] of jobs) {
     try { p = L.makeProblem(t, lv); const fr = p.explain(); count++;
       if (!fr.length) throw new Error('no frames');
       if (fr.some((f) => !f.text)) throw new Error('empty frame text');
+      if (fr.some((f) => !f.fig && !f.grid)) throw new Error('frame without figure');
+      fr.forEach((f) => { if (f.fig && (f.fig.match(/<svg/g) || []).length !== (f.fig.match(/<\/svg>/g) || []).length) throw new Error('svg tags'); if (/NaN|undefined|Infinity/.test(f.fig || '')) throw new Error('bad number in fig: ' + (f.fig.match(/.{30}(NaN|undefined|Infinity).{10}/) || [''])[0]); });
       const v = p.slots[0] && p.slots[0].value;
       if (['int_add','int_sub','dec_add','dec_sub','int_mul','dec_mul','int_div','dec_div'].includes(t)) {
         const last = fr[fr.length - 1].grid;
