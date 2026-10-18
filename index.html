@@ -107,6 +107,18 @@ h1, h2, h3 { font-family: var(--f-display); text-wrap: balance; margin: 0; line-
 .pbar .count { font-family: var(--f-mono); color: var(--ink-2); font-variant-numeric: tabular-nums; }
 .qcard { position: relative; background: var(--sheet); border: 1px solid var(--rule); border-radius: var(--r); padding: 22px 24px; display: grid; gap: 16px; overflow: hidden; }
 .qmeta { display: flex; gap: 8px; align-items: center; font-size: .85rem; color: var(--ink-2); flex-wrap: wrap; }
+.lvchip { font-family: var(--f-mono); font-weight: 700; font-size: .85rem; padding: 3px 8px; border-radius: 6px; background: var(--hl); color: var(--ink); white-space: nowrap; }
+.lvname { color: var(--ink-2); }
+.pnote { margin: 0; font-size: .9rem; color: var(--ink-2); }
+.hero-act { display: grid; gap: 6px; justify-items: center; }
+.hero-act .sub { font-size: .8rem; color: var(--ink-2); }
+.stage .rule { flex-direction: column; align-items: flex-start; gap: 0; }
+.lvls { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 2px; font-size: .82rem; color: var(--ink-2); }
+.lvls .lvn { display: inline-block; min-width: 4.6em; font-family: var(--f-mono); color: var(--board); }
+table.pv { width: auto; border-collapse: collapse; margin: 8px 0; font-variant-numeric: tabular-nums; }
+table.pv th, table.pv td { border: 1px solid var(--rule); padding: 6px 10px; text-align: right; font-family: var(--f-mono); }
+table.pv th { background: var(--board-soft); color: var(--ink); font-family: inherit; font-weight: 700; text-align: left; white-space: nowrap; }
+table.pv td.carry { background: var(--hl); }
 .q { font-size: clamp(1.5rem, 3vw, 2.1rem); line-height: 1.9; font-family: var(--f-body); font-weight: 700; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 .q .box { display: inline-block; min-width: 1.4em; text-align: center; color: var(--board); font-weight: 700; }
 .lead { font-family: var(--f-display); font-weight: 700; font-size: 1.2rem; }
@@ -637,31 +649,150 @@ function divFrames(aS, bS) {
 }
 
 // ===== 問題の種類 =====
-// 各問題: {type, stage, html, text, slots:[{value:Fr, unit, prefer}], choices?, answerChoice?, explain: ()=>frames}
+// 各問題: {type, stage, level, html, text, slots:[{value:Fr, unit, prefer}], choices?, answerChoice?, explain: ()=>frames}
+// levels をもつステップは、10問の中で レベル1 → 5 と だんだん むずかしくなる
 const STAGES = {
-  A1: { track: 'A', name: '整数・小数の計算', types: ['dec_add', 'dec_sub', 'int_mul', 'dec_mul', 'int_div', 'dec_div', 'mental'] },
-  A2: { track: 'A', name: '分数の計算', types: ['fr_add', 'fr_sub', 'fr_mul', 'fr_div'] },
-  A3: { track: 'A', name: 'まぜた計算', types: ['mix_calc', 'mix_calc', 'order'] },
+  A1: { track: 'A', name: '整数の計算', levels: {
+    1: { name: '2けたの たし算・ひき算', types: ['int_add', 'int_sub'] },
+    2: { name: '3けたの たし算・ひき算 (くり上がり・くり下がり)', types: ['int_add', 'int_sub'] },
+    3: { name: '× 1けた、÷ 1けた', types: ['int_mul', 'int_div'] },
+    4: { name: '× 2けた、÷ 2けた', types: ['int_mul', 'int_div'] },
+    5: { name: '大きい数の × ÷、暗算のくふう', types: ['int_mul', 'int_div', 'mental'] },
+  } },
+  A2: { track: 'A', name: '小数の計算', levels: {
+    1: { name: '小数の たし算・ひき算 (けたが同じ)', types: ['dec_add', 'dec_sub'] },
+    2: { name: 'けた数のちがう小数の たし算・ひき算', types: ['dec_add', 'dec_sub'] },
+    3: { name: '小数 × 整数、小数 ÷ 整数', types: ['dec_mul', 'dec_div'] },
+    4: { name: '小数 × 小数', types: ['dec_mul'] },
+    5: { name: '小数 ÷ 小数', types: ['dec_div'] },
+  } },
+  A3: { track: 'A', name: '分数の計算', types: ['fr_add', 'fr_sub', 'fr_mul', 'fr_div'] },
+  A4: { track: 'A', name: 'まぜた計算', types: ['mix_calc', 'mix_calc', 'order'] },
   B1: { track: 'B', name: '単位のかんさん', types: ['conv'] },
   B2: { track: 'B', name: '単位の組み合わせ', types: ['time_mix', 'len_mix', 'speed_conv'] },
   B3: { track: 'B', name: '速さ', types: ['speed'] },
   B4: { track: 'B', name: '単位量あたり', types: ['per_unit', 'per_total', 'compare'] },
 };
-const TRACKS = { A: { name: '計算のしくみ', stages: ['A1', 'A2', 'A3'] }, B: { name: '単位と速さ', stages: ['B1', 'B2', 'B3', 'B4'] } };
+for (const st of Object.values(STAGES)) if (st.levels) st.types = [...new Set(Object.values(st.levels).flatMap((l) => l.types))];
+const LEVEL_RAMP = [1, 1, 2, 2, 3, 3, 4, 4, 5, 5]; // 10問の何問目がどのレベルか
+const TRACKS = { A: { name: '計算のしくみ', stages: ['A1', 'A2', 'A3', 'A4'] }, B: { name: '単位と速さ', stages: ['B1', 'B2', 'B3', 'B4'] } };
 const TYPE_NAMES = {
-  dec_add: '小数のたし算', dec_sub: '小数のひき算', int_mul: '整数のかけ算', dec_mul: '小数のかけ算', int_div: '整数のわり算', dec_div: '小数のわり算', mental: '暗算のくふう',
+  int_add: '整数のたし算', int_sub: '整数のひき算', int_mul: '整数のかけ算', int_div: '整数のわり算', mental: '暗算のくふう',
+  dec_add: '小数のたし算', dec_sub: '小数のひき算', dec_mul: '小数のかけ算', dec_div: '小数のわり算',
   fr_add: '分数のたし算', fr_sub: '分数のひき算', fr_mul: '分数のかけ算', fr_div: '分数のわり算',
   mix_calc: 'まぜた計算', order: '計算の順番',
   conv: '単位のかんさん', time_mix: '時間の組み合わせ', len_mix: '長さ・重さの組み合わせ', speed_conv: '速さの単位',
   speed: '速さの問題', per_unit: '1あたりを求める', per_total: '1あたりから求める', compare: 'くらべる',
 };
 const stageOfType = (t) => Object.keys(STAGES).find((s) => STAGES[s].types.includes(t));
+// あるステップ・レベルで出せる種類
+function levelTypes(stage, lv) { const st = STAGES[stage]; return st.levels ? st.levels[lv].types : st.types; }
 
 const OPS = { '+': '+', '-': '−', '*': '×', '/': '÷' };
 const slot = (value, unit = '', prefer) => ({ value: Fr.of(value), unit, prefer });
 const textFrames = (...ts) => ts.map((t) => ({ text: t }));
 
-// --- A1 ---
+// ===== 位ごとに考える解説 =====
+const PLACE_NAMES = { 4: '万の位', 3: '千の位', 2: '百の位', 1: '十の位', 0: '一の位', '-1': '1/10の位', '-2': '1/100の位', '-3': '1/1000の位' };
+// 数を位ごとの部分に分ける: 352.4 → [{p:2,d:3},{p:1,d:5},{p:0,d:2},{p:-1,d:4}]
+function placeParts(S) {
+  const { ip, fp } = splitDec(S);
+  const out = [];
+  ip.split('').forEach((c, i) => out.push({ p: ip.length - 1 - i, d: +c }));
+  fp.split('').forEach((c, i) => out.push({ p: -(i + 1), d: +c }));
+  return out;
+}
+const partVal = (d, p) => (p >= 0 ? String(d * 10 ** p) : fmtScaled(d, -p));
+const partFr = (d, p) => Fr.dec(partVal(d, p));
+const nonzeroParts = (S) => placeParts(S).filter((x) => x.d > 0);
+// 例: 一の位 8 + 5 = 13 → 13 は 10 と 3。10 は 十の位の 1 つ分
+function carryNote(p, sv) {
+  const up = partFr(1, p + 1); const rest = sv.sub(up);
+  const split = rest.eq(0) ? '' : ` は ${up.toDec()} と ${rest.toDec()}。${up.toDec()}`;
+  return `色のついた位は、数字をたすと 10 以上になります。${PLACE_NAMES[p]}の ${sv.toDec()}${split} は${PLACE_NAMES[p + 1]}の「1」なので、${PLACE_NAMES[p + 1]}に 1 くり上がります。`;
+}
+function pvAddFrames(aS, bS) {
+  const A = placeParts(aS), B = placeParts(bS);
+  const ps = [...new Set([...A, ...B].map((x) => x.p))].sort((x, y) => y - x);
+  const dAt = (P, p) => (P.find((x) => x.p === p) || { d: 0 }).d;
+  const rows = []; const sums = []; let carry = null;
+  for (const p of ps) {
+    const da = dAt(A, p), db = dAt(B, p);
+    const sv = partFr(da, p).add(partFr(db, p));
+    const c = da + db >= 10;
+    if (c) carry = { p, sv };
+    rows.push(`<tr><th>${PLACE_NAMES[p]}</th><td${c ? ' class="carry"' : ''}>${partVal(da, p)} + ${partVal(db, p)} = <b>${sv.toDec()}</b></td></tr>`);
+    if (!sv.eq(0)) sums.push(sv);
+  }
+  const total = Fr.dec(aS).add(Fr.dec(bS));
+  return [
+    { text: `位ごとに分けて たします。<table class="pv">${rows.join('')}</table>` },
+    { text: `位ごとの答えを あわせます: ${sums.map((x) => x.toDec()).join(' + ')} = <b>${total.toDec()}</b>${carry ? `<br><small>${carryNote(carry.p, carry.sv)} 筆算の「くり上がり」は、このことです。</small>` : ''}` },
+  ];
+}
+function pvSubFrames(aS, bS) {
+  const parts = nonzeroParts(bS);
+  let cur = Fr.dec(aS); const lines = [];
+  for (const x of parts) { const v = partFr(x.d, x.p); const nx = cur.sub(v); lines.push(`${cur.toDec()} − ${v.toDec()} = <b>${nx.toDec()}</b>`); cur = nx; }
+  if (parts.length < 2) return [{ text: `${aS} − ${bS} = <b>${cur.toDec()}</b>` }];
+  return [
+    { text: `ひく数 ${bS} を 位ごとに ${parts.map((x) => partVal(x.d, x.p)).join(' と ')} に分けて、順にひきます。` },
+    { text: lines.join('<br>') + `<br><small>大きい位から順にひくと、暗算でも考えやすくなります。</small>` },
+  ];
+}
+function pvMulFrames(aS, bS) {
+  const A = splitDec(aS), B = splitDec(bS);
+  const res = Fr.dec(aS).mul(Fr.dec(bS));
+  const fs = [];
+  if (!B.places && B.digits.length === 1) {
+    const parts = nonzeroParts(aS);
+    if (parts.length >= 2) {
+      const ps = parts.map((x) => ({ v: partFr(x.d, x.p), s: partVal(x.d, x.p) }));
+      fs.push({ text: `${aS} を ${ps.map((x) => x.s).join(' と ')} に分けて、それぞれに ${bS} をかけます。<br>${ps.map((x) => `${x.s} × ${bS} = <b>${x.v.mul(Fr.dec(bS)).toDec()}</b>`).join('<br>')}` });
+      fs.push({ text: `あわせて ${ps.map((x) => x.v.mul(Fr.dec(bS)).toDec()).join(' + ')} = <b>${res.toDec()}</b>` });
+    }
+    if (A.places) fs.push({ text: `別の考え方: ${aS} は 0.${'0'.repeat(A.places - 1)}1 が ${+A.digits} こ。${+A.digits} × ${bS} = ${+A.digits * +bS} なので、0.${'0'.repeat(A.places - 1)}1 が ${+A.digits * +bS} こ = <b>${res.toDec()}</b>` });
+  } else if (!B.places && !A.places) {
+    const parts = nonzeroParts(bS);
+    const ps = parts.map((x) => ({ v: partFr(x.d, x.p), s: partVal(x.d, x.p) }));
+    fs.push({ text: `かける数 ${bS} を ${ps.map((x) => x.s).join(' と ')} に分けて、それぞれ ${aS} にかけます。<br>${ps.map((x) => `${aS} × ${x.s} = <b>${Fr.dec(aS).mul(x.v).toDec()}</b>`).join('<br>')}` });
+    fs.push({ text: `あわせて ${ps.map((x) => Fr.dec(aS).mul(x.v).toDec()).join(' + ')} = <b>${res.toDec()}</b><br><small>筆算で書く段は、この ${ps.length} つの数です (0 は書かずに、1つずつ左にずらして書きます)。</small>` });
+  } else {
+    const ua = A.places ? `0.${'0'.repeat(A.places - 1)}1` : '1', ub = B.places ? `0.${'0'.repeat(B.places - 1)}1` : '1';
+    const up = A.places + B.places;
+    fs.push({ text: `小さい単位の「いくつ分」で考えます。<br>${aS} は ${ua} が ${+A.digits} こ、${bS} は ${ub} が ${+B.digits} こ。` });
+    fs.push({ text: `${+A.digits} × ${+B.digits} = ${+A.digits * +B.digits}。${ua} × ${ub} = 0.${'0'.repeat(up - 1)}1 なので、答えは 0.${'0'.repeat(up - 1)}1 が ${+A.digits * +B.digits} こ = <b>${res.toDec()}</b>` });
+  }
+  return fs;
+}
+function pvDivFrames(aS, bS) {
+  const B = splitDec(bS);
+  const D = Fr.dec(aS).mul(10 ** B.places), d = +B.digits;
+  const Ds = D.toDec(), Q = D.div(d);
+  const fs = [];
+  if (B.places) fs.push({ text: `わる数 ${bS} を整数にするため、わる数とわられる数を両方 ${10 ** B.places} 倍します: ${aS} ÷ ${bS} = ${Ds} ÷ ${d}<br><small>両方を同じ数だけ倍しても、答え (商) は変わりません。</small>` });
+  const Dp = splitDec(Ds).places;
+  let N = Fr.dec(Ds).mul(10 ** Dp), M = N.div(d);
+  if (Dp && M.isInt()) {
+    const u = `0.${'0'.repeat(Dp - 1)}1`;
+    fs.push({ text: `${Ds} は ${u} が ${N.n} こ。${N.n} ÷ ${d} = ${M.n} なので、${u} が ${M.n} こ = <b>${Q.toDec()}</b>` });
+    return fs;
+  }
+  if (Q.isInt()) {
+    const parts = nonzeroParts(String(Q.n));
+    if (parts.length >= 2) {
+      const chunks = parts.map((x) => ({ q: partVal(x.d, x.p), c: d * x.d * 10 ** x.p }));
+      fs.push({ text: `${Ds} を ${d} でわりやすい数に分けます: ${Ds} = ${chunks.map((x) => x.c).join(' + ')}<br>${chunks.map((x) => `${x.c} ÷ ${d} = <b>${x.q}</b>`).join('<br>')}` });
+      fs.push({ text: `あわせて ${chunks.map((x) => x.q).join(' + ')} = <b>${Q.n}</b><br><small>筆算では、この分け方を上の位から順に行っています。</small>` });
+    } else {
+      fs.push({ text: `${d} × □ = ${Ds} になる □ をさがします。${d} × ${Q.n} = ${Ds} なので <b>${Q.n}</b>` });
+    }
+  }
+  return fs;
+}
+const withHissan = (pv, hs) => pv.concat([{ text: '同じ計算を、筆算で1段ずつ見てみましょう。' }], hs);
+
+// --- A1 整数 / A2 小数 (レベルつき) ---
 function decStr(intDigitsMax, places) {
   const max = 10 ** (intDigitsMax + places) - 1;
   let v;
@@ -669,48 +800,78 @@ function decStr(intDigitsMax, places) {
   return fmtScaled(v, places);
 }
 const GEN = {};
-GEN.dec_add = () => {
-  const p1 = ri(1, 2), p2 = p1 === 1 ? 2 : pick([1, 2]);
-  const a = decStr(2, p1), b = decStr(pick([1, 2]), p2);
-  const v = Fr.dec(a).add(Fr.dec(b));
-  return { html: `${a} + ${b} =`, text: `${a} + ${b}`, slots: [slot(v)], explain: () => addSubFrames(a, b, '+') };
-};
-GEN.dec_sub = () => {
-  let a, b;
-  do { a = decStr(2, ri(1, 2)); b = decStr(pick([1, 2]), ri(1, 2)); } while (Fr.dec(a).cmp(Fr.dec(b)) <= 0 || splitDec(a).fp.length === splitDec(b).fp.length && rnd() < 0.5);
-  const v = Fr.dec(a).sub(Fr.dec(b));
-  return { html: `${a} − ${b} =`, text: `${a} − ${b}`, slots: [slot(v)], explain: () => addSubFrames(a, b, '-') };
-};
 const noZeroInt = (lo, hi) => { let v; do { v = ri(lo, hi); } while (/0/.test(String(v))); return v; };
-GEN.int_mul = () => {
-  const a = ri(102, 987), b = noZeroInt(12, 89);
-  return { html: `${a} × ${b} =`, text: `${a} × ${b}`, slots: [slot(a * b)], explain: () => mulFrames(String(a), String(b)) };
+const digitsOf = (n) => String(n).split('').map(Number);
+function addProblem(a, b) { const v = Fr.dec(a).add(Fr.dec(b)); return { html: `${a} + ${b} =`, text: `${a} + ${b}`, slots: [slot(v)], explain: () => withHissan(pvAddFrames(a, b), addSubFrames(a, b, '+')) }; }
+function subProblem(a, b) { const v = Fr.dec(a).sub(Fr.dec(b)); return { html: `${a} − ${b} =`, text: `${a} − ${b}`, slots: [slot(v)], explain: () => withHissan(pvSubFrames(a, b), addSubFrames(a, b, '-')) }; }
+GEN.int_add = (lv = 1) => {
+  for (;;) {
+    if (lv <= 1) { const a = ri(11, 88), b = ri(11, 88); const da = digitsOf(a), db = digitsOf(b); if (da[0] + db[0] <= 9 && da[1] + db[1] <= 9) return addProblem(String(a), String(b)); }
+    else { const a = ri(105, 899), b = ri(105, 899); const da = digitsOf(a), db = digitsOf(b); if (da[2] + db[2] >= 10 || da[1] + db[1] >= 10) return addProblem(String(a), String(b)); }
+  }
 };
-GEN.dec_mul = () => {
-  const a = pick([fmtScaled(ri(11, 99), 1), fmtScaled(ri(101, 999), 2), fmtScaled(ri(11, 99), 1)]);
-  const b = pick([fmtScaled(noZeroInt(11, 99), 1), fmtScaled(ri(2, 9), 1), String(ri(3, 9)), fmtScaled(noZeroInt(11, 99), 1)]);
-  if (!/\./.test(a) && !/\./.test(b)) return GEN.dec_mul();
-  const v = Fr.dec(a).mul(Fr.dec(b));
-  return { html: `${a} × ${b} =`, text: `${a} × ${b}`, slots: [slot(v)], explain: () => mulFrames(a, b) };
+GEN.int_sub = (lv = 1) => {
+  for (;;) {
+    if (lv <= 1) { const a = ri(25, 99), b = ri(11, a - 1); const da = digitsOf(a), db = digitsOf(b); if (db.length === 2 && da[1] >= db[1]) return subProblem(String(a), String(b)); }
+    else { const a = ri(201, 999), b = ri(102, a - 50); const da = digitsOf(a), db = digitsOf(b); if (db.length === 3 && (da[2] < db[2] || da[1] < db[1])) return subProblem(String(a), String(b)); }
+  }
 };
-GEN.int_div = () => {
-  const d = ri(12, 48), q = ri(12, 99) * (rnd() < 0.3 ? 10 : 1) + (rnd() < 0.3 ? 0 : 0);
-  const a = d * q;
-  return { html: `${a} ÷ ${d} =`, text: `${a} ÷ ${d}`, slots: [slot(q)], explain: () => divFrames(String(a), String(d)) };
+function mulProblem(a, b) { const v = Fr.dec(a).mul(Fr.dec(b)); return { html: `${a} × ${b} =`, text: `${a} × ${b}`, slots: [slot(v)], explain: () => withHissan(pvMulFrames(a, b), mulFrames(a, b)) }; }
+function divProblem(a, b, q) { return { html: `${a} ÷ ${b} =`, text: `${a} ÷ ${b}`, slots: [slot(q)], explain: () => withHissan(pvDivFrames(a, b), divFrames(a, b)) }; }
+GEN.int_mul = (lv = 3) => {
+  if (lv <= 3) return mulProblem(String(ri(12, 98)), String(ri(3, 9)));
+  if (lv === 4) return mulProblem(String(ri(12, 98)), String(noZeroInt(12, 59)));
+  return mulProblem(String(ri(102, 987)), String(noZeroInt(12, 89)));
 };
-GEN.dec_div = () => {
-  const form = ri(0, 2);
+GEN.int_div = (lv = 3) => {
+  let d, q;
+  if (lv <= 3) { d = ri(2, 9); q = ri(12, 99); }
+  else if (lv === 4) { for (;;) { d = ri(12, 48); q = ri(3, 9); if (d * q >= 100) break; } }
+  else { d = ri(12, 48); q = ri(12, 99) * (rnd() < 0.25 ? 10 : 1); }
+  return divProblem(String(d * q), String(d), q);
+};
+GEN.dec_add = (lv = 2) => {
+  if (lv <= 1) {
+    for (;;) { const a = ri(11, 89), b = ri(11, 89); const da = digitsOf(a), db = digitsOf(b); if (da[1] && db[1] && da[0] + db[0] <= 9 && da[1] + db[1] <= 9) return addProblem(fmtScaled(a, 1), fmtScaled(b, 1)); }
+  }
+  // けた数をわざとそろえない (小数点をそろえる練習)
+  const p1 = pick([1, 2]), p2 = 3 - p1;
+  return addProblem(decStr(pick([1, 2]), p1), decStr(pick([1, 2]), p2));
+};
+GEN.dec_sub = (lv = 2) => {
+  if (lv <= 1) {
+    for (;;) { const a = ri(21, 99), b = ri(11, a - 1); const da = digitsOf(a), db = digitsOf(b); if (da[1] && db[1] && db.length === 2 && da[1] >= db[1]) return subProblem(fmtScaled(a, 1), fmtScaled(b, 1)); }
+  }
+  let a, b;
+  do { const p1 = pick([1, 2]); a = decStr(2, p1); b = decStr(pick([1, 2]), 3 - p1); } while (Fr.dec(a).cmp(Fr.dec(b)) <= 0 || splitDec(a).fp.length === splitDec(b).fp.length);
+  return subProblem(a, b);
+};
+GEN.dec_mul = (lv = 4) => {
+  if (lv <= 3) { let a; do { a = fmtScaled(ri(11, 99), 1); } while (!/\./.test(a)); return mulProblem(a, String(ri(2, 9))); }
+  if (lv === 4) {
+    const a = pick([fmtScaled(ri(11, 99), 1), fmtScaled(ri(11, 99), 1), fmtScaled(ri(101, 999), 2)]);
+    const b = pick([fmtScaled(noZeroInt(11, 99), 1), fmtScaled(ri(2, 9), 1)]);
+    if (!/\./.test(a) || !/\./.test(b)) return GEN.dec_mul(lv);
+    return mulProblem(a, b);
+  }
+  const a = fmtScaled(ri(101, 999), 2), b = fmtScaled(noZeroInt(11, 99), 1);
+  if (!/\./.test(a) || !/\./.test(b)) return GEN.dec_mul(lv);
+  return mulProblem(a, b);
+};
+GEN.dec_div = (lv = 5) => {
   let a, b, q;
-  for (let tries = 0; tries < 200; tries++) {
-    if (form === 0) { b = String(ri(3, 9)); q = Fr.dec(fmtScaled(ri(11, 99), 1)); }
-    else if (form === 1) { b = fmtScaled(ri(2, 9), 1); q = Fr.dec(String(ri(3, 40))); }
+  for (let tries = 0; tries < 400; tries++) {
+    if (lv <= 3) { b = String(ri(2, 9)); q = Fr.dec(fmtScaled(ri(11, 99), 1)); }
+    else if (rnd() < 0.5) { b = fmtScaled(ri(2, 9), 1); q = Fr.dec(String(ri(3, 40))); }
     else { b = fmtScaled(noZeroInt(12, 48), 1); q = Fr.dec(pick([String(ri(2, 30)), fmtScaled(ri(11, 59), 1)])); }
+    if (q.isInt() && q.n % 10 === 0) continue;
     const av = Fr.dec(b).mul(q);
     if (av.decPlaces() > 2) continue;
     a = av.toDec();
+    if (!/\./.test(a) && lv <= 3) continue;
     break;
   }
-  return { html: `${a} ÷ ${b} =`, text: `${a} ÷ ${b}`, slots: [slot(q)], explain: () => divFrames(a, b) };
+  return divProblem(a, b, q);
 };
 GEN.mental = () => {
   const kind = ri(0, 7);
@@ -1087,9 +1248,9 @@ GEN.compare = () => {
   return { html: `A: えんぴつ ${n1} 本で ${y1} 円<br>B: えんぴつ ${n2} 本で ${y2} 円`, text: `A:${n1}本${y1}円 / B:${n2}本${y2}円`, lead: '1本あたりが安いのはどちら？', choices: [{ id: 'A', html: 'A' }, { id: 'B', html: 'B' }], answerChoice: ans, slots: [], explain: () => textFrames('本数がちがうので、「1本あたりのねだん」にそろえてくらべます。', `A: ${y1} ÷ ${n1} = ${r1.n} 円<br>B: ${y2} ÷ ${n2} = ${r2.n} 円`, `1本あたりが安いのは ${ans} です。`) };
 };
 
-function makeProblem(type) {
-  const p = GEN[type]();
-  p.type = type; p.stage = stageOfType(type);
+function makeProblem(type, level) {
+  const p = GEN[type](level);
+  p.type = type; p.stage = stageOfType(type); p.level = STAGES[p.stage].levels ? level : null;
   p.answerText = p.choices ? (p.choices.find((c) => c.id === p.answerChoice).text || p.choices.find((c) => c.id === p.answerChoice).html)
     : p.slots.map((s) => `${ansText(s.value, s.prefer)}${s.unit ? ' ' + s.unit : ''}`).join(' ');
   p.answerHTML = p.choices ? p.choices.find((c) => c.id === p.answerChoice).html
@@ -1097,18 +1258,34 @@ function makeProblem(type) {
   return p;
 }
 
-if (typeof module !== 'undefined') module.exports = { Fr, GEN, makeProblem, STAGES, TRACKS, judgeSlot, parseAnswer, addSubFrames, mulFrames, divFrames, exprSteps, gridHTML, setRnd: (f) => { rnd = f; } };
+if (typeof module !== 'undefined') module.exports = { Fr, GEN, makeProblem, STAGES, TRACKS, LEVEL_RAMP, levelTypes, judgeSlot, parseAnswer, addSubFrames, mulFrames, divFrames, exprSteps, gridHTML, setRnd: (f) => { rnd = f; } };
 </script>
 <script>
 // ===== 保存 =====
 const LS_KEY = 'keisan-tani-v1';
 const SESSION_LEN = 10;
-const UNLOCK_NEED = 8; // 直近10問のうち
+const UNLOCK_NEED = 8; // ステップの10問のうち
 function freshState() {
-  return { v: 1, updatedAt: 0, unlocked: { A1: true, B1: true }, recent: {}, mistakes: {}, typeStats: {}, sessions: [] };
+  return { v: 2, updatedAt: 0, unlocked: { A1: true, B1: true }, best: {}, mistakes: {}, typeStats: {}, sessions: [] };
+}
+// v1 (A1=整数・小数, A2=分数, A3=まぜた計算) → v2 (A1=整数, A2=小数, A3=分数, A4=まぜた計算)
+function migrate(s) {
+  if (!s || typeof s !== 'object') return null;
+  if (s.v === 2) return s;
+  if (s.v !== 1) return null;
+  const u = s.unlocked || {};
+  const unlocked = { A1: true, A2: !!u.A2, A3: !!u.A2, A4: !!u.A3, B1: true, B2: !!u.B2, B3: !!u.B3, B4: !!u.B4 };
+  const mistakes = {};
+  const oldLv = { dec_add: 2, dec_sub: 2, dec_mul: 4, dec_div: 5, int_mul: 4, int_div: 4, mental: 5 };
+  for (const [t, n] of Object.entries(s.mistakes || {})) if (n > 0 && !t.includes(':')) mistakes[`${t}:${oldLv[t] || 0}`] = n;
+  const modeMap = { A2: 'A3', A3: 'A4' };
+  const sessions = (s.sessions || []).map((x) => Object.assign({}, x, { mode: modeMap[x.mode] || x.mode }));
+  const out = Object.assign({}, s, { v: 2, unlocked, mistakes, best: {}, sessions });
+  delete out.recent;
+  return out;
 }
 function loadLocal() {
-  try { const s = JSON.parse(localStorage.getItem(LS_KEY)); if (s && s.v === 1) return Object.assign(freshState(), s); } catch (e) { /* 読めないときは新しく始める */ }
+  try { const s = migrate(JSON.parse(localStorage.getItem(LS_KEY))); if (s) return Object.assign(freshState(), s); } catch (e) { /* 読めないときは新しく始める */ }
   return freshState();
 }
 function saveLocal() {
@@ -1124,10 +1301,10 @@ async function initDb() {
   try {
     const snap = await db.doc('state/main').get();
     if (snap.exists) {
-      const remote = snap.data();
-      if ((remote.updatedAt || 0) > (state.updatedAt || 0)) {
+      const remote = migrate(JSON.parse(JSON.stringify(snap.data())));
+      if (remote && (remote.updatedAt || 0) > (state.updatedAt || 0)) {
         const sessions = state.sessions;
-        state = Object.assign(freshState(), JSON.parse(JSON.stringify(remote)), { sessions });
+        state = Object.assign(freshState(), remote, { sessions });
       }
     }
     const qs = await db.collection('sessions').orderBy('endedAt', 'desc').limit(60).get();
@@ -1163,23 +1340,38 @@ function weightedStage() {
   for (const [s, w] of list) { if ((x -= w) < 0) return s; }
   return list[0][0];
 }
+// mistakes のキーは "種類:レベル" (レベルのないステップは 0)
+const missKey = (type, level) => `${type}:${level || 0}`;
+function splitMiss(k) { const [type, lv] = k.split(':'); return { type, level: +lv || null }; }
+function missLabel(k) { const { type, level } = splitMiss(k); return TYPE_NAMES[type] + (level ? ` (レベル${level})` : ''); }
+// 1回の10問: レベルのあるステップは 1問ごとに LEVEL_RAMP にそってむずかしくなる
 function planSession(mode) {
-  const types = [];
   const allowed = mode === 'auto' ? unlockedStages() : [mode];
-  const miss = Object.entries(state.mistakes).filter(([t, n]) => n > 0 && allowed.includes(stageOfType(t))).sort((a, b) => b[1] - a[1]).map(([t]) => t);
-  miss.slice(0, 3).forEach((t) => types.push(t));
-  while (types.length < SESSION_LEN) {
+  const plan = [];
+  for (let i = 0; i < SESSION_LEN; i++) {
     const st = mode === 'auto' ? weightedStage() : mode;
-    types.push(pick(STAGES[st].types));
+    const level = STAGES[st].levels ? LEVEL_RAMP[i] : null;
+    plan.push({ type: pick(levelTypes(st, level)), level });
   }
-  return shuffle(types);
+  // 前にまちがえた種類を、同じレベルの位置に入れる (最大3問)
+  const miss = Object.entries(state.mistakes).filter(([k, n]) => n > 0 && STAGES[stageOfType(splitMiss(k).type)] && allowed.includes(stageOfType(splitMiss(k).type)))
+    .sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k]) => splitMiss(k));
+  const used = new Set();
+  for (const m of miss) {
+    let idx = m.level ? LEVEL_RAMP.findIndex((lv, i) => lv === m.level && !used.has(i)) : -1;
+    if (idx < 0 && !m.level) { const free = plan.map((x, i) => i).filter((i) => !used.has(i) && !plan[i].level); idx = free.length ? pick(free) : -1; }
+    if (idx < 0) continue;
+    used.add(idx); plan[idx] = { type: m.type, level: m.level };
+  }
+  if (!plan.some((x) => x.level)) return shuffle(plan);
+  return plan;
 }
 
 // ===== 練習の状態 =====
 let view = 'home';
 let sess = null; // {id, mode, plan:[{type, extra}], idx, items:[], startedAt, problem, inputs, active, phase, t0, sideTab, frame, hint}
 function startSession(mode) {
-  sess = { id: 's' + Date.now().toString(36) + Math.floor(rnd() * 1e4).toString(36), mode, plan: planSession(mode).map((t) => ({ type: t })), idx: 0, items: [], startedAt: Date.now() };
+  sess = { id: 's' + Date.now().toString(36) + Math.floor(rnd() * 1e4).toString(36), mode, plan: planSession(mode), idx: 0, items: [], startedAt: Date.now() };
   view = 'practice';
   nextProblem(true);
 }
@@ -1187,7 +1379,7 @@ function nextProblem(first) {
   if (!first) sess.idx++;
   if (sess.idx >= sess.plan.length) { finishSession(); return; }
   const it = sess.plan[sess.idx];
-  sess.problem = makeProblem(it.type);
+  sess.problem = makeProblem(it.type, it.level || undefined);
   sess.inputs = sess.problem.slots.map(() => '');
   sess.choice = null;
   sess.active = 0;
@@ -1208,19 +1400,14 @@ function showExplain() {
 function recordAnswer(ok, givenText) {
   const p = sess.problem;
   const extra = !!sess.plan[sess.idx].extra;
-  const item = { type: p.type, stage: p.stage, q: p.text, given: givenText, answer: p.answerText, ok, hint: sess.hint, ms: Date.now() - sess.t0, extra };
+  const item = { type: p.type, stage: p.stage, level: p.level, q: p.text, given: givenText, answer: p.answerText, ok, hint: sess.hint, ms: Date.now() - sess.t0, extra };
   sess.items.push(item);
   const ts = state.typeStats[p.type] || (state.typeStats[p.type] = { n: 0, c: 0, hint: 0, review: 0 });
   ts.n++; if (ok) ts.c++; if (sess.hint) ts.hint++;
-  const rec = state.recent[p.stage] || (state.recent[p.stage] = []);
-  rec.push(ok ? 1 : 0); if (rec.length > 10) rec.shift();
-  const m = state.mistakes[p.type] || 0;
-  state.mistakes[p.type] = ok ? Math.max(0, m - 1) : Math.min(3, m + 1);
-  // 次の段をひらく
-  const st = STAGES[p.stage]; const order = TRACKS[st.track].stages; const nx = order[order.indexOf(p.stage) + 1];
-  if (nx && !state.unlocked[nx] && rec.length >= 10 && rec.reduce((a, b) => a + b, 0) >= UNLOCK_NEED) {
-    state.unlocked[nx] = true; sess.unlockedNow = (sess.unlockedNow || []).concat(nx);
-  }
+  const mk = missKey(p.type, p.level);
+  const m = state.mistakes[mk] || 0;
+  state.mistakes[mk] = ok ? Math.max(0, m - 1) : Math.min(3, m + 1);
+  if (!state.mistakes[mk]) delete state.mistakes[mk];
   state.updatedAt = Date.now();
   saveLocal();
 }
@@ -1250,11 +1437,25 @@ function submit() {
   render();
 }
 function oneMore() {
-  sess.plan.splice(sess.idx + 1, 0, { type: sess.problem.type, extra: true });
+  sess.plan.splice(sess.idx + 1, 0, { type: sess.problem.type, level: sess.problem.level, extra: true });
   nextProblem();
+}
+const nextStageOf = (s) => { const order = TRACKS[STAGES[s].track].stages; return order[order.indexOf(s) + 1]; };
+// ステップをえらんだ10問を全部答えたときだけ、点数を記録し、8問以上なら次のステップをひらく
+function judgeStage() {
+  if (sess.mode === 'auto') return;
+  const main = sess.items.filter((x) => !x.extra);
+  if (main.length < SESSION_LEN) return;
+  const c = main.filter((x) => x.ok).length;
+  const b = state.best[sess.mode];
+  if (!b || c > b.c) state.best[sess.mode] = { c, n: SESSION_LEN };
+  sess.stageScore = c;
+  const nx = nextStageOf(sess.mode);
+  if (nx && c >= UNLOCK_NEED && !state.unlocked[nx]) { state.unlocked[nx] = true; sess.unlockedNow = [nx]; }
 }
 function finishSession(quit) {
   if (!sess) return;
+  if (!quit) judgeStage();
   if (sess.items.length) {
     const s = { id: sess.id, mode: sess.mode, startedAt: sess.startedAt, endedAt: Date.now(), n: sess.items.length, c: sess.items.filter((x) => x.ok).length, items: sess.items, quit: !!quit };
     state.sessions.unshift(s); state.sessions = state.sessions.slice(0, 60);
@@ -1281,17 +1482,20 @@ function dotsHTML(arr, total = 10) {
   for (let i = 0; i < total; i++) s += `<i class="${arr[i] === 1 ? 'ok' : arr[i] === 0 ? 'ng' : ''}"></i>`;
   return s + '</span>';
 }
+function bestText(s) { const b = state.best[s]; return b ? `いちばんよい点: ${b.c} / ${b.n}` : 'まだ10問やっていません'; }
 function homeHTML() {
-  const miss = Object.entries(state.mistakes).filter(([, n]) => n > 0).map(([t]) => TYPE_NAMES[t]);
-  let h = `<section class="hero grid-bg"><div><h1>きょうの れんしゅう</h1><p>1回 10問。わからないときは「しくみを見る」で、筆算や考え方を1つずつ見られます。</p>${miss.length ? `<p>前にまちがえた種類も入ります: ${miss.slice(0, 3).join('、')}${miss.length > 3 ? ' ほか' : ''}</p>` : ''}</div><button class="btn btn-main" data-act="start" data-v="auto">おまかせで はじめる</button></section><div class="tracks">`;
+  const miss = Object.entries(state.mistakes).filter(([, n]) => n > 0).map(([k]) => missLabel(k));
+  let h = `<section class="hero grid-bg"><div><h1>きょうの れんしゅう</h1><p>ステップをえらぶと、1回 10問。<b>1問ごとに少しずつむずかしくなります</b> (レベル1 → 5)。</p><p>10問中 ${UNLOCK_NEED}問以上 正解すると、次のステップが ひらきます。わからないときは「しくみを見る」で、考え方を1つずつ見られます。</p>${miss.length ? `<p>前にまちがえた問題も入ります: ${miss.slice(0, 3).join('、')}${miss.length > 3 ? ' ほか' : ''}</p>` : ''}</div><div class="hero-act"><button class="btn btn-main" data-act="start" data-v="auto">おまかせで はじめる</button><span class="sub">ひらいているステップから まぜて出します</span></div></section><div class="tracks">`;
   for (const t of Object.keys(TRACKS)) {
     const T = TRACKS[t];
     h += `<section class="track"><h2>${t}. ${T.name}</h2>`;
     T.stages.forEach((s, i) => {
-      const on = state.unlocked[s]; const rec = state.recent[s] || [];
-      const prev = T.stages[i - 1];
-      const types = [...new Set(STAGES[s].types)].map((x) => TYPE_NAMES[x]).join('・');
-      h += `<div class="stage${on ? '' : ' locked'}"><span class="code">${s}</span><div><div class="nm">${STAGES[s].name}</div><div class="sub">${on ? `${dotsHTML(rec)}<span>${rec.length ? `直近 ${rec.length}問中 ${rec.reduce((a, b) => a + b, 0)}問 正解` : 'まだやっていません'}</span>` : `<span>${prev} で直近10問中${UNLOCK_NEED}問 正解すると ひらきます</span>`}</div><div class="sub">${types}</div></div>${on ? `<button class="btn btn-sub" data-act="start" data-v="${s}">これをやる</button>` : '<span></span>'}</div>`;
+      const on = state.unlocked[s]; const prev = T.stages[i - 1]; const nx = T.stages[i + 1]; const St = STAGES[s];
+      const lv = St.levels ? `<ol class="lvls">${Object.entries(St.levels).map(([n, l]) => `<li><span class="lvn">レベル${n}</span>${l.name}</li>`).join('')}</ol>` : `<div class="sub">${[...new Set(St.types)].map((x) => TYPE_NAMES[x]).join('・')}</div>`;
+      let rule;
+      if (!on) rule = `<span>${prev}「${STAGES[prev].name}」の10問で ${UNLOCK_NEED}問以上 正解すると ひらきます</span>`;
+      else rule = `<span>${bestText(s)}</span>${nx && !state.unlocked[nx] ? `<span>${UNLOCK_NEED}問以上 正解で ${nx} が ひらきます</span>` : ''}`;
+      h += `<div class="stage${on ? '' : ' locked'}"><span class="code">${s}</span><div><div class="nm">${St.name}</div><div class="sub rule">${rule}</div>${lv}</div>${on ? `<button class="btn btn-sub" data-act="start" data-v="${s}">これをやる</button>` : '<span></span>'}</div>`;
     });
     h += '</section>';
   }
@@ -1317,8 +1521,10 @@ function practiceHTML() {
     dots += `<i class="${it ? (it.ok ? 'ok' : 'ng') : ''}${i === sess.idx ? ' now' : ''}"></i>`; k++;
   });
   dots += '</span>';
-  let left = `<div class="pbar">${dots}<span class="count">${isExtra ? 'もう1問' : `${doneMain + 1} / ${main}`}</span><button class="btn btn-line" data-act="quit" style="padding:8px 14px;font-size:.9rem">やめる</button></div>`;
-  left += `<div class="qcard"><div class="qmeta"><span class="code">${p.stage}</span><span>${TYPE_NAMES[p.type]}</span></div>`;
+  let left = `<div class="pbar">${dots}<span class="count">${isExtra ? 'もう1問 (同じレベル)' : `${doneMain + 1} / ${main} 問目`}</span><button class="btn btn-line" data-act="quit" style="padding:8px 14px;font-size:.9rem">やめる</button></div>`;
+  if (sess.idx === 0 && p.level) left += `<p class="pnote">1問ごとに少しずつ むずかしくなります (レベル1 → 5)。${sess.mode === 'auto' ? '' : `10問中 ${UNLOCK_NEED}問以上 正解で 次のステップが ひらきます。`}</p>`;
+  const lvInfo = p.level ? STAGES[p.stage].levels[p.level] : null;
+  left += `<div class="qcard"><div class="qmeta"><span class="code">${p.stage}</span>${p.level ? `<span class="lvchip">レベル ${p.level} / 5</span>` : ''}<span>${TYPE_NAMES[p.type]}</span>${lvInfo ? `<span class="lvname">${lvInfo.name}</span>` : ''}</div>`;
   if (p.lead) left += `<div class="lead">${p.lead}</div>`;
   left += `<div class="q">${p.html}</div>`;
   if (p.note) left += `<div class="qnote">${p.note}</div>`;
@@ -1371,10 +1577,14 @@ function resultHTML() {
   const mins = Math.max(1, Math.round((s.endedAt - s.startedAt) / 60000));
   let h = `<section class="result"><div class="score"><span class="big">${s.c} / ${s.n}</span><span>正解 (${mins}分)</span></div>`;
   (sess.unlockedNow || []).forEach((st) => { h += `<div class="banner">${st}「${STAGES[st].name}」が ひらきました。</div>`; });
-  const wrongTypes = [...new Set(s.items.filter((x) => !x.ok).map((x) => TYPE_NAMES[x.type]))];
+  if (sess.mode !== 'auto' && sess.stageScore !== undefined && !(sess.unlockedNow || []).length) {
+    const nx = nextStageOf(sess.mode);
+    if (nx && !state.unlocked[nx]) h += `<p class="note">あと ${UNLOCK_NEED - sess.stageScore}問 正解すると ${nx}「${STAGES[nx].name}」が ひらきます。もう1回 ${sess.mode} をやってみよう。</p>`;
+  }
+  const wrongTypes = [...new Set(s.items.filter((x) => !x.ok).map((x) => TYPE_NAMES[x.type] + (x.level ? ` (レベル${x.level})` : '')))];
   if (wrongTypes.length) h += `<p class="note">次の練習では、${wrongTypes.join('、')} を多めに出します。</p>`;
-  h += '<div class="list">' + s.items.map((x) => `<div class="li"><span class="m ${x.ok ? 'ok' : 'ng'}">${x.ok ? '○' : '–'}</span><span class="qq">${esc(x.q)}${x.extra ? ' <span class="pill">もう1問</span>' : ''}</span><span class="aa">${x.ok ? esc(x.answer) : `答え ${esc(x.answer)}<br>入力 ${esc(x.given)}`}</span></div>`).join('') + '</div>';
-  h += '<div class="fb-actions"><button class="btn btn-main" data-act="start" data-v="auto">もう1回 おまかせ</button><button class="btn btn-line" data-act="tab" data-v="home">はじめの画面へ</button></div></section>';
+  h += '<div class="list">' + s.items.map((x) => `<div class="li"><span class="m ${x.ok ? 'ok' : 'ng'}">${x.ok ? '○' : '–'}</span><span class="qq">${x.level ? `<span class="lvchip">Lv${x.level}</span> ` : ''}${esc(x.q)}${x.extra ? ' <span class="pill">もう1問</span>' : ''}</span><span class="aa">${x.ok ? esc(x.answer) : `答え ${esc(x.answer)}<br>入力 ${esc(x.given)}`}</span></div>`).join('') + '</div>';
+  h += `<div class="fb-actions"><button class="btn btn-main" data-act="start" data-v="${sess.mode}">もう1回 ${sess.mode === 'auto' ? 'おまかせ' : sess.mode}</button><button class="btn btn-line" data-act="tab" data-v="home">はじめの画面へ</button></div></section>`;
   return h;
 }
 function fmtDate(t) { const d = new Date(t); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
@@ -1382,8 +1592,8 @@ let confirmReset = false;
 let copyState = null; // null | 'ok' | 'manual'
 function exportText() {
   const sessions = state.sessions.slice(0, 30).map((s) => ({ at: new Date(s.endedAt).toISOString(), mode: s.mode, n: s.n, c: s.c, min: Math.round((s.endedAt - s.startedAt) / 6000) / 10, quit: s.quit || undefined,
-    items: s.items.map((x) => [x.type, x.ok ? 1 : 0, x.hint ? 1 : 0, Math.round(x.ms / 1000), x.q, x.given, x.answer]) }));
-  return '計算と単位の練習帳 記録\n' + JSON.stringify({ exportedAt: new Date().toISOString(), unlocked: state.unlocked, recent: state.recent, mistakes: state.mistakes, typeStats: state.typeStats, itemsFormat: ['type', 'ok', 'hint', 'sec', 'q', 'given', 'answer'], sessions });
+    items: s.items.map((x) => [x.type + (x.level ? ':' + x.level : ''), x.ok ? 1 : 0, x.hint ? 1 : 0, Math.round(x.ms / 1000), x.q, x.given, x.answer]) }));
+  return '計算と単位の練習帳 記録\n' + JSON.stringify({ v: 2, exportedAt: new Date().toISOString(), unlocked: state.unlocked, best: state.best, mistakes: state.mistakes, typeStats: state.typeStats, itemsFormat: ['type', 'ok', 'hint', 'sec', 'q', 'given', 'answer'], sessions });
 }
 function parentHTML() {
   const all = Object.values(state.typeStats).reduce((a, s) => ({ n: a.n + s.n, c: a.c + s.c }), { n: 0, c: 0 });
@@ -1392,11 +1602,11 @@ function parentHTML() {
   const lastS = state.sessions[0];
   let h = `<section class="parent"><div><h1 style="font-size:1.6rem">きろく</h1><p class="store">保存先: この端末のブラウザ${dbStatus === 'on' ? '、claude.ai (同じアカウントなら別の端末でも記録が続きます)' : dbStatus === 'error' ? '。claude.ai への保存に失敗しました。この端末には保存されています' : dbStatus === 'checking' ? ' (claude.ai への接続を確認中)' : 'のみ。別の端末とは共有されないため、こまめに「記録をコピー」で送ってください'}</p></div>`;
   h += `<div class="tiles"><div class="tile"><div class="k">この7日間の問題数</div><div class="v">${week}</div></div><div class="tile"><div class="k">これまでの正答率</div><div class="v">${all.n ? Math.round(all.c / all.n * 100) + '%' : '–'}</div></div><div class="tile"><div class="k">これまでの問題数</div><div class="v">${all.n}</div></div><div class="tile"><div class="k">最後の練習</div><div class="v" style="font-size:1.2rem">${lastS ? fmtDate(lastS.endedAt) : '–'}</div></div></div>`;
-  h += `<div class="sec"><h2>段階</h2><p class="note">直近10問で${UNLOCK_NEED}問正解すると次の段階がひらきます。ここから手動でひらく・とじることもできます。</p><div class="tbl-wrap"><table><thead><tr><th>段階</th><th>内容</th><th>状態</th><th>直近10問</th><th></th></tr></thead><tbody>`;
+  h += `<div class="sec"><h2>段階</h2><p class="note">ステップをえらんだ10問 (レベル1→5) で ${UNLOCK_NEED}問以上 正解すると、次のステップがひらきます。おまかせの練習ではひらきません。ここから手動でひらく・とじることもできます。</p><div class="tbl-wrap"><table><thead><tr><th>段階</th><th>内容</th><th>状態</th><th>いちばんよい点</th><th></th></tr></thead><tbody>`;
   for (const s of Object.keys(STAGES)) {
-    const rec = state.recent[s] || [];
+    const b = state.best[s];
     const base = s === 'A1' || s === 'B1';
-    h += `<tr><td><span class="code">${s}</span></td><td>${STAGES[s].name}</td><td><span class="pill${state.unlocked[s] ? ' on' : ''}">${state.unlocked[s] ? 'ひらいている' : 'まだ'}</span></td><td>${dotsHTML(rec)} ${rec.length ? `${rec.reduce((a, b) => a + b, 0)}/${rec.length}` : ''}</td><td>${base ? '' : `<button class="btn btn-line" style="padding:6px 12px;font-size:.85rem" data-act="toggle" data-v="${s}">${state.unlocked[s] ? 'とじる' : 'ひらく'}</button>`}</td></tr>`;
+    h += `<tr><td><span class="code">${s}</span></td><td>${STAGES[s].name}</td><td><span class="pill${state.unlocked[s] ? ' on' : ''}">${state.unlocked[s] ? 'ひらいている' : 'まだ'}</span></td><td>${b ? `${b.c} / ${b.n}` : '–'}</td><td>${base ? '' : `<button class="btn btn-line" style="padding:6px 12px;font-size:.85rem" data-act="toggle" data-v="${s}">${state.unlocked[s] ? 'とじる' : 'ひらく'}</button>`}</td></tr>`;
   }
   h += '</tbody></table></div></div>';
   const rows = Object.keys(TYPE_NAMES).map((t) => ({ t, s: state.typeStats[t] })).filter((x) => x.s && x.s.n).sort((a, b) => a.s.c / a.s.n - b.s.c / b.s.n);
@@ -1404,7 +1614,7 @@ function parentHTML() {
   if (!rows.length) h += '<p class="note">まだ記録がありません。練習すると、ここに種類ごとの正答率が出ます。</p>';
   else {
     h += '<div class="tbl-wrap"><table><thead><tr><th>種類</th><th>段階</th><th>回数</th><th>正答率</th><th>先にしくみを見た</th><th>次回多めに出す</th></tr></thead><tbody>';
-    rows.forEach(({ t, s }) => { const r = Math.round(s.c / s.n * 100); h += `<tr><td>${TYPE_NAMES[t]}</td><td>${stageOfType(t)}</td><td class="num">${s.n}</td><td><span class="bar${r < 70 ? ' low' : ''}"><i style="width:${r}%"></i></span>${r}%</td><td class="num">${s.hint}</td><td>${state.mistakes[t] ? '<span class="pill">はい</span>' : ''}</td></tr>`; });
+    rows.forEach(({ t, s }) => { const r = Math.round(s.c / s.n * 100); h += `<tr><td>${TYPE_NAMES[t]}</td><td>${stageOfType(t)}</td><td class="num">${s.n}</td><td><span class="bar${r < 70 ? ' low' : ''}"><i style="width:${r}%"></i></span>${r}%</td><td class="num">${s.hint}</td><td>${Object.keys(state.mistakes).some((k) => k.startsWith(t + ':')) ? '<span class="pill">はい</span>' : ''}</td></tr>`; });
     h += '</tbody></table></div>';
   }
   h += '</div><div class="sec"><h2>最近の練習</h2>';
