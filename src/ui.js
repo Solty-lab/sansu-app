@@ -204,7 +204,7 @@ const $ = (sel, root = document) => root.querySelector(sel);
 const app = () => document.getElementById('app');
 
 function header() {
-  const tab = (id, label) => `<button data-act="tab" data-v="${id}" aria-pressed="${(view === id || (id === 'home' && ['practice', 'result'].includes(view)))}">${label}</button>`;
+  const tab = (id, label) => `<button data-act="tab" data-v="${id}" aria-pressed="${(view === id || (id === 'home' && ['practice', 'result', 'lesson'].includes(view)))}">${label}</button>`;
   return `<header class="top"><div class="brand"><span class="sq" aria-hidden="true"></span>計算と単位の練習帳</div><nav class="tabs" aria-label="画面">${tab('home', 'れんしゅう')}${tab('parent', 'きろく (保護者)')}</nav></header>`;
 }
 function dotsHTML(arr, total = 10) {
@@ -227,7 +227,7 @@ function homeHTML() {
         acts = `<button class="btn btn-sub" data-act="start" data-v="${s}">1→5 で10問</button>${bestText(s) ? `<span class="best">いちばんよい点 ${bestText(s)}</span>` : ''}`;
       } else {
         body = `<div class="sub">${[...new Set(St.types)].map((x) => TYPE_NAMES[x]).join('・')}</div>`;
-        acts = `<button class="btn btn-sub" data-act="start" data-v="${s}">これをやる</button>${bestText(s) ? `<span class="best">いちばんよい点 ${bestText(s)}</span>` : ''}`;
+        acts = `<button class="btn btn-sub" data-act="start" data-v="${s}">これをやる</button>${s === 'A4' ? '<button class="btn btn-line" data-act="lesson" data-v="order">計算の順番のわけ (読みもの)</button>' : ''}${bestText(s) ? `<span class="best">いちばんよい点 ${bestText(s)}</span>` : ''}`;
       }
       h += `<div class="stage"><span class="code">${s}</span><div><div class="nm">${St.name}</div>${body}</div><div class="stage-acts">${acts}</div></div>`;
     });
@@ -301,7 +301,7 @@ function practiceHTML() {
     right += '<div class="explain"><p class="ex-empty">答えたあとに、考え方を1つずつ見られます。</p></div>';
   } else {
     const fs = frames(); const f = fs[sess.frame];
-    right += `<div class="explain"><div class="ex-nav"><button class="btn btn-line" data-act="fprev" ${sess.frame === 0 ? 'disabled' : ''}>まえ</button><button class="btn btn-sub" data-act="fnext" ${sess.frame >= fs.length - 1 ? 'disabled' : ''}>つぎ</button><span class="count">${sess.frame + 1} / ${fs.length}</span></div>${f.fig ? `<div class="fig ex-scroll">${f.fig}</div>` : ''}${f.grid ? `<div class="ex-scroll">${gridHTML(f.grid, { div: f.div })}</div>` : ''}<div class="ex-step">${f.text}</div></div>`;
+    right += `<div class="explain"><div class="ex-nav"><button class="btn btn-line" data-act="fprev" ${sess.frame === 0 ? 'disabled' : ''}>まえ</button><button class="btn btn-sub" data-act="fnext" ${sess.frame >= fs.length - 1 ? 'disabled' : ''}>つぎ</button><span class="count">${sess.frame + 1} / ${fs.length}</span></div>${f.fig ? `<div class="fig ex-scroll">${f.fig}</div>` : ''}${f.grid ? `<div class="ex-scroll">${gridHTML(f.grid, { div: f.div })}</div>` : ''}<div class="ex-step">${f.text}</div>${f.lesson ? `<div class="fb-actions"><button class="btn btn-sub" data-act="lesson" data-v="${f.lesson}">なぜこの順番？ くわしく見る</button></div>` : ''}</div>`;
   }
   right += '</aside>';
   return `<div class="practice"><div class="col">${left}</div>${right}</div>`;
@@ -359,12 +359,19 @@ function parentHTML() {
   h += `<div class="sec"><h2>データ</h2><div class="danger">${confirmReset ? '<span>この端末と claude.ai のいちばんよい点・正答率をリセットします。練習の記録一覧は残ります。</span><button class="btn btn-danger" data-act="reset-yes">リセットする</button><button class="btn btn-line" data-act="reset-no">やめる</button>' : '<button class="btn btn-line" data-act="reset">いちばんよい点と正答率をリセット</button>'}</div></div>`;
   return h + '</section>';
 }
+// 読みもの (例: 計算の順番のわけ)。back は もどる先の画面
+let lesson = null; // { id, frame, back, frames }
+function lessonHTML() {
+  const L = LESSONS[lesson.id]; const fs = lesson.frames; const f = fs[lesson.frame];
+  return `<section class="lesson"><div class="lesson-head"><h1>${L.title}</h1><button class="btn btn-line" data-act="lback">${lesson.back === 'practice' ? '問題にもどる' : 'はじめの画面へ'}</button></div><div class="explain"><div class="ex-nav"><button class="btn btn-line" data-act="lprev" ${lesson.frame === 0 ? 'disabled' : ''}>まえ</button><button class="btn btn-sub" data-act="lnext" ${lesson.frame >= fs.length - 1 ? 'disabled' : ''}>つぎ</button><span class="count">${lesson.frame + 1} / ${fs.length}</span></div><div class="fig ex-scroll">${f.fig}</div><div class="ex-step">${f.text}</div></div></section>`;
+}
 function render() {
   const el = app(); if (!el) return;
   let body = '';
   if (view === 'home') body = homeHTML();
   else if (view === 'practice') body = practiceHTML();
   else if (view === 'result') body = resultHTML();
+  else if (view === 'lesson') body = lessonHTML();
   else body = parentHTML();
   el.innerHTML = `<div class="wrap">${header()}${body}</div>`;
   if (view === 'practice' && sess.sideTab === 'memo') attachMemo();
@@ -438,6 +445,10 @@ document.addEventListener('click', (e) => {
   const b = e.target.closest('[data-act]'); if (!b) return;
   const a = b.dataset.act, v = b.dataset.v;
   if (a === 'tab') { if (view === 'practice' && sess && sess.phase) { finishSession(true); } view = v; confirmReset = false; copyState = null; render(); window.scrollTo(0, 0); }
+  else if (a === 'lesson') { lesson = { id: v, frame: 0, back: view === 'practice' ? 'practice' : 'home', frames: LESSONS[v].frames() }; view = 'lesson'; render(); window.scrollTo(0, 0); }
+  else if (a === 'lprev') { lesson.frame = Math.max(0, lesson.frame - 1); render(); }
+  else if (a === 'lnext') { lesson.frame = Math.min(lesson.frames.length - 1, lesson.frame + 1); render(); }
+  else if (a === 'lback') { view = lesson.back === 'practice' && sess ? 'practice' : 'home'; lesson = null; render(); window.scrollTo(0, 0); }
   else if (a === 'start') { startSession(v, b.dataset.lv); window.scrollTo(0, 0); }
   else if (a === 'key') typeKey(v);
   else if (a === 'slot') { if (sess.phase === 'answer') { sess.active = +v; render(); } }

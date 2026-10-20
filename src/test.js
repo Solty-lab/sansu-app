@@ -36,3 +36,5 @@ for (const [t, lv] of jobs) {
 console.log('checked', count, 'fails', fails);
 seed = 7;
 for (const [t, lv] of jobs) { const p = L.makeProblem(t, lv); console.log((t + (lv ? ' L' + lv : '')).padEnd(12), '|', p.text, '| ans:', p.answerText); }
+// 読みもの
+for (const [id, Ls] of Object.entries(L.LESSONS)) { const fs = Ls.frames(); if (!fs.length || fs.some((f) => !f.fig || !f.text || /NaN|undefined/.test(f.fig))) console.log('LESSON NG', id); else console.log('lesson', id, fs.length, 'frames ok'); }

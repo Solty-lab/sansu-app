@@ -416,7 +416,7 @@ function figNumberLine(o) {
   const W = 540, x0 = 34, x1 = W - 34;
   const jumps = o.jumps || [];
   const X = (v) => x0 + (x1 - x0) * (v - o.min) / (o.max - o.min);
-  const hs = jumps.map((j, i) => { const w = Math.abs(X(j.b) - X(j.a)); return Math.min(70, Math.max(18, w * 0.35)) + (w < 70 && i % 2 ? 26 : 0); });
+  const hs = jumps.map((j, i) => { const w = Math.abs(X(j.b) - X(j.a)); return Math.min(70, Math.max(18, w * 0.35)) + (w < 130 && i % 2 ? 28 : 0); });
   const base = jumps.length ? Math.max(...hs) + 34 : 28;
   let b = `<line class="ln" x1="${x0 - 12}" y1="${base}" x2="${x1 + 16}" y2="${base}"/><path class="ln" d="M${x1 + 9} ${base - 5} L${x1 + 16} ${base} L${x1 + 9} ${base + 5}"/>`;
   const step = niceStep(o.max - o.min, 20);
@@ -1166,7 +1166,7 @@ function exprSteps(tokens) {
   const right = evalTree(tree); const naive = naiveEval(tokens);
   const hasParen = tokens.some((t) => t.k === '(');
   const warn = right.eq(naive) ? '' : `<br><small>もし 左から順に計算すると ${naive.n < 0 ? '途中で ひけなくなってしまいます' : `${fv(naive)} になり、正しい答え ${fv(right)} と ちがってしまいます`}。式の意味が変わってしまうからです。</small>`;
-  frames.push({ fig: `<div class="expr grpd">${groupHTML(tree, true)}</div>`, text: `式を言葉にすると、${meaningOf(tree, true)} です。<br>「〜の〜倍」「〜を〜でわった数」は、それだけで 1つの数 (まとまり) を表しています (□で かこんだ所)。たしたり ひいたりする相手は、この まとまりの数 なので、まとまりの数を先に出します。${hasParen ? '<br>かっこは「この中を先に 1つの数にまとめる」という しるしです。' : ''}${warn}` });
+  frames.push({ fig: `<div class="expr grpd">${groupHTML(tree, false)}</div>` + figLevels(), lesson: 'order', text: `式を言葉にすると、${meaningOf(tree, true)} です。<br>「〜の〜倍」「〜を〜でわった数」は、それだけで 1つの数 (まとまり) を表しています (□で かこんだ所)。たしたり ひいたりする相手は、この まとまりの数 なので、まとまりの数を先に出します。${hasParen ? '<br>かっこは「この中を先に 1つの数にまとめる」という しるしです。' : ''}${warn}` });
   frames.push({ fig: figTree(tree, firstReducible(tree), numText), text: `計算の順番: ① かっこの中 → ② かけ算・わり算 → ③ たし算・ひき算 (同じなかまは左から)。<br><small>図は「式の木」です。上の数を 下の ○ の計算で まとめていきます。黄色の ○ が次の計算です。</small><div class="expr">${tokensHTML(nodeTokens(tree))}</div>` });
   for (let guard = 0; guard < 8 && !tree.leaf; guard++) {
     const n = firstReducible(tree);
@@ -1431,6 +1431,73 @@ GEN.compare = () => {
   return { html: `A: えんぴつ ${n1} 本で ${y1} 円<br>B: えんぴつ ${n2} 本で ${y2} 円`, text: `A:${n1}本${y1}円 / B:${n2}本${y2}円`, lead: '1本あたりが安いのはどちら？', choices: [{ id: 'A', html: 'A' }, { id: 'B', html: 'B' }], answerChoice: ans, slots: [], explain: () => figFrames(figTable(['', '本数', '代金 (円)', '1本あたり (円)'], [['A', n1, y1, `<b>${r1.n}</b>`], ['B', n2, y2, `<b>${r2.n}</b>`]]) + figBars([{ s: 'A', v: r1.val(), label: String(r1.n) }, { s: 'B', v: r2.val(), label: String(r2.n), cls: 'sh3' }], ' 円'), '本数がちがうので、表のいちばん右の列「1本あたりのねだん」にそろえてくらべます。', `A: ${y1} ÷ ${n1} = ${r1.n} 円<br>B: ${y2} ÷ ${n2} = ${r2.n} 円`, `1本あたりが安いのは ${ans} です。`) };
 };
 
+// ===== 読みもの: 計算の順番のわけ =====
+// テープ図: rows = [{ s, segs: [{ w, s, cls }], braces: [{ from, to, s, side }], total }]  w は量 (同じ図の中で同じ縮尺)
+function figTapes(rows, o = {}) {
+  const W = 540, x0 = 104, TW = 400;
+  const max = o.max || Math.max(...rows.map((r) => r.segs.reduce((a, s) => a + s.w, 0)));
+  const k = TW / max;
+  let y = 8; let b = '';
+  rows.forEach((r) => {
+    const top = (r.braces || []).some((x) => x.side !== 'bot'); const bot = (r.braces || []).some((x) => x.side === 'bot');
+    if (top) y += 30;
+    const xs = []; let x = x0;
+    r.segs.forEach((s) => { xs.push([x, s.w * k]); b += `<rect class="${s.cls || 'sh'}" x="${r1(x)}" y="${y}" width="${r1(s.w * k)}" height="34"/>` + svgText(x + s.w * k / 2, y + 22, s.s, 'b'); x += s.w * k; });
+    b += svgText(x0 - 10, y + 22, r.s, r.lcls || '', 'end');
+    if (r.total) b += svgText(x + 8, y + 22, r.total, 'm', 'start');
+    (r.braces || []).forEach((br) => {
+      const xa = xs[br.from][0] + 2, xb = xs[br.to][0] + xs[br.to][1] - 2; const up = br.side !== 'bot';
+      const yb = up ? y - 4 : y + 38; const d = up ? -8 : 8; const xm = (xa + xb) / 2;
+      b += `<path class="ac" d="M${r1(xa)} ${yb} q0 ${d} 8 ${d} L${r1(xm - 8)} ${yb + d} q8 0 8 ${d} q0 ${-d} 8 ${-d} L${r1(xb - 8)} ${yb + d} q8 0 8 ${-d}"/>` + svgText(xm, up ? yb + 2 * d - 6 : yb + 2 * d + 14, br.s, 'm');
+    });
+    y += 34 + (bot ? 36 : 0) + 14;
+  });
+  return svgBox(W, y, b, o.label || 'テープ図');
+}
+// 計算の「段」: かっこ → × ÷ → + −。上の段でできた数が、下の段の材料になる
+function figLevels(hl) {
+  const W = 540; let b = '';
+  const lv = [
+    ['① かっこ ( )', 'ここを先に 1つにまとめたい、という しるし'],
+    ['② × ÷', '同じ数のまとまりを作る・分ける → 1つの数ができる'],
+    ['③ + −', 'できた数どうしを あわせる・とる'],
+  ];
+  lv.forEach(([h, s], i) => {
+    const y = 10 + i * 66; const x = 30 + i * 20;
+    b += `<rect class="${hl === i ? 'sh2' : i === 1 ? 'sh' : i === 2 ? 'sh3' : 'bx'}" x="${x}" y="${y}" width="${W - 60 - i * 40}" height="46" rx="8"/>` + svgText(x + 14, y + 20, h, 'b', 'start') + svgText(x + 14, y + 38, s, 's', 'start');
+    if (i < 2) b += `<path class="ac" d="M${W / 2} ${y + 48} l0 14 m-6 -6 l6 6 l6 -6"/>` + svgText(W / 2 + 12, y + 60, 'できた数を 下の段へ', 's', 'start');
+  });
+  b += svgText(W - 20, 216, '同じ段どうしは 左から順に', 'm', 'end');
+  return svgBox(W, 224, b, '計算の順番の段');
+}
+function orderWhyFrames() {
+  const note = (s) => ({ w: 100, s, cls: 'sh' }); const pen = (s = 80) => ({ w: 80, s: String(s), cls: 'sh3' });
+  return [
+    { fig: figTapes([{ s: '代金', segs: [note('ノート 100'), pen('えんぴつ 80'), pen(), pen()], braces: [{ from: 1, to: 3, s: '80 × 3' }] }], { label: 'ノートとえんぴつの代金のテープ図' }),
+      text: '<b>かけ算は「同じ数のたし算」を短く書いたもの</b><br>100円のノートを 1さつと、80円のえんぴつを 3本 買いました。代金はいくら？<br>えんぴつ代は 80 + 80 + 80。同じ数を何回もたすので、かけ算で <b>80 × 3</b> と短く書けます。だから式は <b>100 + 80 × 3</b> です。' },
+    { fig: figTapes([{ s: '代金', segs: [note('ノート 100'), pen('えんぴつ 80'), pen(), pen()], braces: [{ from: 1, to: 3, s: '80 × 3 = 240 (えんぴつ代)' }, { from: 0, to: 3, s: '100 + 240 = 340', side: 'bot' }] }], { label: '代金のテープ図' }),
+      text: '<b>80 × 3 は、それだけで 1つの数</b><br>80 × 3 は「えんぴつ代 240円」という 1つの まとまりの数です。ノート代 100円と あわせる相手は、えんぴつ1本ではなく、この えんぴつ代です。<br>だから、まとまり (×) を先に出してから あわせます: 100 + 240 = <b>340円</b>' },
+    { fig: figTapes([
+      { s: '正しい', segs: [note('ノート'), pen('えんぴつ'), pen('えんぴつ'), pen('えんぴつ')], total: '340円' },
+      { s: '左から', lcls: 'm', segs: [note('ノート'), pen('えんぴつ'), note('ノート'), pen('えんぴつ'), note('ノート'), pen('えんぴつ')], total: '540円' },
+    ], { label: '正しい順番と左から計算したときのテープ図' }),
+      text: '<b>もし 左から順に計算すると？</b><br>100 + 80 を先にして 180、それを 3倍すると 540円。これは「ノート1さつ と えんぴつ1本」のセットを 3つ 買った代金です。ノートが 3さつに ふえてしまいました。<br>計算の順番を変えると、<b>式の意味 (何を何こ買ったか) が変わる</b>ので、答えも変わります。' },
+    { fig: figTapes([
+      { s: 'ケーキ', segs: [{ w: 200, s: '1人分 200', cls: 'sh2' }, { w: 200, s: '200', cls: 'sh3' }, { w: 200, s: '200', cls: 'sh3' }], braces: [{ from: 0, to: 2, s: '600 ÷ 3' }] },
+      { s: 'もちもの', segs: [{ w: 200, s: 'はらう 200', cls: 'sh2' }, { w: 300, s: 'のこり 300', cls: 'sh' }], total: '500円' },
+    ], { label: 'わり算の順番のテープ図' }),
+      text: '<b>わり算も、かけ算と同じ なかま</b><br>500円 持っています。600円のケーキを 3人で 同じだけ出しあいました。のこりは？ 式は <b>500 − 600 ÷ 3</b>。<br>600 ÷ 3 は「1人分 200円」という 1つの数です。ひく相手は この1人分なので、先に出します: 500 − 200 = <b>300円</b><br><small>÷ は「同じ数ずつに分ける」計算で、× の反対です。だから × と ÷ は同じ段の なかまです。</small>' },
+    { fig: '<div class="figcap">正しい順番 (左から): ① 3こ 食べる → ② 2こ もらう</div>' + figNumberLine({ min: 0, max: 10, marks: [{ v: 0, s: '0' }, { v: 10, s: '10' }, { v: 7, s: '7' }], jumps: [{ a: 10, b: 7, s: '① −3' }], label: '10 − 3' }) + figNumberLine({ min: 0, max: 10, marks: [{ v: 0, s: '0' }, { v: 7, s: '7' }, { v: 9, s: '9こ', cls: 'm' }], jumps: [{ a: 7, b: 9, s: '② +2' }], label: '7 + 2' })
+      + '<div class="figcap">右の 3 + 2 を先にすると: 5こ とってしまう</div>' + figNumberLine({ min: 0, max: 10, marks: [{ v: 0, s: '0' }, { v: 10, s: '10' }, { v: 5, s: '5こ' }], jumps: [{ a: 10, b: 5, s: '−(3+2)' }], label: '10 − 5' }),
+      text: '<b>同じ段どうしは、左から順に</b><br>あめが 10こ。3こ 食べて、2こ もらいました: <b>10 − 3 + 2 = 9こ</b>。<br>もし右の 3 + 2 を先にすると 10 − 5 = 5こ。「2こ もらった」が「2こ 食べた」に変わってしまいます。+ と − は同じ段なので、お話の じゅんばん (書いた順) に計算します。<br><small>× と ÷ も同じ: 12 ÷ 2 × 3 は「12 を 2つに分けた1つ分 (6) の 3つ分」で 18。</small>' },
+    { fig: figTapes([{ s: 'セット×3', segs: [note('ノート'), pen('えんぴつ'), note('ノート'), pen('えんぴつ'), note('ノート'), pen('えんぴつ')], braces: [{ from: 0, to: 1, s: '100 + 80 = 180' }, { from: 0, to: 5, s: '(100 + 80) × 3 = 540', side: 'bot' }] }], { label: 'かっこのテープ図' }),
+      text: '<b>かっこは「ここを先に まとめたい」ときの しるし</b><br>「ノートと えんぴつの セット」を 3つ 買うなら、セットの代金 100 + 80 を先に 1つの数にしたいので、かっこを使って <b>(100 + 80) × 3</b> と書きます。<br>かっこがあれば、そこが いちばん先です。' },
+    { fig: figLevels(),
+      text: '<b>まとめ</b><br>× ÷ は「同じ数のまとまり」を作ったり分けたりして、1つの数を作る計算。+ − は、できた数どうしを あわせたり とったりする計算。<br>だから、<b>まず まとまり (× ÷) を作り、それから あわせる・とる (+ −)</b>。かっこは、自分で「ここを先に」と決めた まとまりです。<br>この順番は、式の意味 (お話) を 1つに決めるための、みんなの約束です。' },
+  ];
+}
+const LESSONS = { order: { title: '計算の順番のわけ', frames: orderWhyFrames } };
+
 function makeProblem(type, level) {
   const p = GEN[type](level);
   p.type = type; p.stage = stageOfType(type); p.level = STAGES[p.stage].levels ? level : null;
@@ -1441,4 +1508,4 @@ function makeProblem(type, level) {
   return p;
 }
 
-if (typeof module !== 'undefined') module.exports = { Fr, GEN, makeProblem, STAGES, TRACKS, LEVEL_RAMP, levelTypes, judgeSlot, parseAnswer, addSubFrames, mulFrames, divFrames, exprSteps, gridHTML, setRnd: (f) => { rnd = f; } };
+if (typeof module !== 'undefined') module.exports = { Fr, GEN, makeProblem, LESSONS, STAGES, TRACKS, LEVEL_RAMP, levelTypes, judgeSlot, parseAnswer, addSubFrames, mulFrames, divFrames, exprSteps, gridHTML, setRnd: (f) => { rnd = f; } };
