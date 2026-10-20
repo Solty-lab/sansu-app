@@ -140,6 +140,20 @@ table.mx td, table.mx th { text-align: center; }
 .lesson-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
 .lesson .explain { background: var(--sheet); border: 1px solid var(--rule); border-radius: var(--r); padding: 18px; }
 .lesson .ex-step { font-size: 1.05rem; line-height: 1.8; }
+.ueq { display: grid; gap: 8px; border: 1px solid var(--rule); border-radius: var(--r); padding: 10px 14px; margin: 6px 0; }
+.ueq-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.ueq-lb { min-width: 6em; font-size: .8rem; font-weight: 700; color: var(--ink-2); }
+.ueq-body { font-size: 1.15rem; line-height: 2.6; }
+.ueq-row.all .ueq-body { font-weight: 700; }
+.uq, .uqf { display: inline-flex; align-items: center; white-space: nowrap; vertical-align: middle; }
+.uqf { flex-direction: column; vertical-align: middle; margin: 0 2px; line-height: 1.25; }
+.uqf .t { border-bottom: 2px solid currentColor; padding: 0 4px 2px; }
+.uqf .d { padding: 2px 4px 0; }
+.u { color: var(--sea-ink); background: var(--sea); border-radius: 5px; padding: 0 4px; font-weight: 700; display: inline-block; line-height: 1.35; }
+.u.ux { text-decoration: line-through; text-decoration-color: var(--mark); text-decoration-thickness: 3px; opacity: .75; }
+.ueq .op { margin: 0 4px; }
+.uq .n + .u, .uqf .n + .u { margin-left: 5px; }
+.choices .uqf, .choices .uq { font-size: 1.6rem; }
 .figcap { font-size: .85rem; font-weight: 700; color: var(--ink-2); margin: 6px 0 2px; }
 .expr.grpd { font-size: 1.4rem; padding: 8px 0; }
 .grp { display: inline-block; border: 2px solid var(--mark); border-radius: 8px; padding: 0 6px; margin: 0 2px; }

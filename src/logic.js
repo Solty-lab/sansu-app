@@ -585,10 +585,11 @@ const STAGES = {
   B2: { track: 'B', name: '単位の組み合わせ', types: ['time_mix', 'len_mix', 'speed_conv'] },
   B3: { track: 'B', name: '速さ', types: ['speed'] },
   B4: { track: 'B', name: '単位量あたり', types: ['per_unit', 'per_total', 'compare'] },
+  B5: { track: 'B', name: '単位も計算する (密度など)', types: ['unit_of', 'unit_check', 'density'] },
 };
 for (const st of Object.values(STAGES)) if (st.levels) st.types = [...new Set(Object.values(st.levels).flatMap((l) => l.types))];
 const LEVEL_RAMP = [1, 1, 2, 2, 3, 3, 4, 4, 5, 5]; // 10問の何問目がどのレベルか
-const TRACKS = { A: { name: '計算のしくみ', stages: ['A1', 'A2', 'A3', 'A4'] }, B: { name: '単位と速さ', stages: ['B1', 'B2', 'B3', 'B4'] } };
+const TRACKS = { A: { name: '計算のしくみ', stages: ['A1', 'A2', 'A3', 'A4'] }, B: { name: '単位と速さ', stages: ['B1', 'B2', 'B3', 'B4', 'B5'] } };
 const TYPE_NAMES = {
   int_add: '整数のたし算', int_sub: '整数のひき算', int_mul: '整数のかけ算', int_div: '整数のわり算', mental: '暗算のくふう',
   dec_add: '小数のたし算', dec_sub: '小数のひき算', dec_mul: '小数のかけ算', dec_div: '小数のわり算',
@@ -596,6 +597,7 @@ const TYPE_NAMES = {
   mix_calc: 'まぜた計算', order: '計算の順番',
   conv: '単位のかんさん', time_mix: '時間の組み合わせ', len_mix: '長さ・重さの組み合わせ', speed_conv: '速さの単位',
   speed: '速さの問題', per_unit: '1あたりを求める', per_total: '1あたりから求める', compare: 'くらべる',
+  unit_of: '答えの単位', unit_check: '単位で式をたしかめる', density: '密度',
 };
 const stageOfType = (t) => Object.keys(STAGES).find((s) => STAGES[s].types.includes(t));
 // あるステップ・レベルで出せる種類
@@ -1303,13 +1305,13 @@ GEN.conv = () => {
       ? { fig: pow10 ? figUnitPlace(big, small, ratio, L) : dl, text: `大きい単位 → 小さい単位 なので、数は大きくなります。${Ls} × ${ratio} = ${Ss}${ratio % 10 === 0 && String(ratio).replace(/0/g, '') === '1' ? `<br><small>× ${ratio} は、小数点を右に ${String(ratio).length - 1} つ動かすのと同じです。表の数字のならびは同じで、どの単位で読むかが変わるだけです。</small>` : ''}` }
       : { fig: pow10 ? figUnitPlace(big, small, ratio, L) : dl, text: `小さい単位 → 大きい単位 なので、数は小さくなります。${Ss} ÷ ${ratio} = ${ansText(L)}${ratio % 10 === 0 && String(ratio).replace(/0/g, '') === '1' ? `<br><small>÷ ${ratio} は、小数点を左に ${String(ratio).length - 1} つ動かすのと同じです。表の数字のならびは同じで、どの単位で読むかが変わるだけです。</small>` : ''}` },
   ];
-  return { html, text, slots: [toSmall ? slot(S, small) : slot(L, big)], explain: () => frames };
+  return { html, text, slots: [toSmall ? slot(S, small) : slot(L, big)], units: () => [toSmall ? convUnitFrame(Ls, big, Ss, small, [ratio, small], [1, big], `${Ls} × ${ratio} = ${Ss}`) : convUnitFrame(Ss, small, Ls, big, [1, big], [ratio, small], `${Ss} ÷ ${ratio} = ${Ls}`)], explain: () => frames };
 };
 GEN.time_mix = () => {
   const v = ri(0, 3);
   if (v === 0) {
     const h = ri(1, 3), m = ri(1, 11) * 5;
-    return { html: `${h}時間${m}分 = <b class="box">□</b> 分`, text: `${h}時間${m}分 = □分`, slots: [slot(h * 60 + m, '分')], explain: () => figFrames(minuteLine(h * 60 + m), '1時間 = 60分 です。数直線の大きい目もりが 1時間 (60分) です。', `${h}時間 = 60 × ${h} = ${h * 60}分。${h * 60} + ${m} = ${h * 60 + m}分`) };
+    return { html: `${h}時間${m}分 = <b class="box">□</b> 分`, text: `${h}時間${m}分 = □分`, slots: [slot(h * 60 + m, '分')], units: () => [convUnitFrame(h, '時間', h * 60, '分', [60, '分'], [1, '時間'], `${h} × 60 = ${h * 60}。のこりの ${m}分 とあわせて ${h * 60 + m}分`)], explain: () => figFrames(minuteLine(h * 60 + m), '1時間 = 60分 です。数直線の大きい目もりが 1時間 (60分) です。', `${h}時間 = 60 × ${h} = ${h * 60}分。${h * 60} + ${m} = ${h * 60 + m}分`) };
   }
   if (v === 1) {
     const M = ri(65, 250); const h = Math.floor(M / 60), m = M % 60;
@@ -1320,7 +1322,7 @@ GEN.time_mix = () => {
     const h = ri(0, 3), m = pick([6, 12, 15, 18, 24, 30, 36, 42, 45, 48, 54]);
     const val = new Fr(h * 60 + m, 60);
     const left = h ? `${h}時間${m}分` : `${m}分`;
-    return { html: `${left} = <b class="box">□</b> 時間`, text: `${left} = □時間`, slots: [slot(val, '時間')], note: '小数か分数で答えよう', explain: () => figFrames(figDoubleLine({ top: '分', bot: '時間', cols: [{ pos: 0, t: '0', b: '0' }, { pos: 60, t: '60', b: '1' }, { pos: h * 60 + m, t: String(h * 60 + m), b: ansText(val), ub: true }], arrows: [{ from: 60, to: h * 60 + m, s: `×${frText(val)}`, side: 'bot' }], label: '分と時間の二本の数直線' }), '1分は 1時間の 1/60 です。上が分、下が時間の目もりです。', `${m}分 = ${fracHTML(m, 60)} 時間 = ${frHTML(new Fr(m, 60), false)} 時間${new Fr(m, 60).terminating() ? ` = ${new Fr(m, 60).toDec()} 時間` : ''}`, `だから ${left} = ${ansHTML(val)} 時間${val.terminating() ? '' : ` (${frHTML(val, false)} でも正解)`}`) };
+    return { html: `${left} = <b class="box">□</b> 時間`, text: `${left} = □時間`, slots: [slot(val, '時間')], note: '小数か分数で答えよう', units: () => [convUnitFrame(h * 60 + m, '分', frText(val, false), '時間', [1, '時間'], [60, '分'], `${h * 60 + m} ÷ 60 = ${frText(val, false)}`)], explain: () => figFrames(figDoubleLine({ top: '分', bot: '時間', cols: [{ pos: 0, t: '0', b: '0' }, { pos: 60, t: '60', b: '1' }, { pos: h * 60 + m, t: String(h * 60 + m), b: ansText(val), ub: true }], arrows: [{ from: 60, to: h * 60 + m, s: `×${frText(val)}`, side: 'bot' }], label: '分と時間の二本の数直線' }), '1分は 1時間の 1/60 です。上が分、下が時間の目もりです。', `${m}分 = ${fracHTML(m, 60)} 時間 = ${frHTML(new Fr(m, 60), false)} 時間${new Fr(m, 60).terminating() ? ` = ${new Fr(m, 60).toDec()} 時間` : ''}`, `だから ${left} = ${ansHTML(val)} 時間${val.terminating() ? '' : ` (${frHTML(val, false)} でも正解)`}`) };
   }
   const mi = ri(1, 5), s = ri(1, 11) * 5;
   return { html: `${mi}分${s}秒 = <b class="box">□</b> 秒`, text: `${mi}分${s}秒 = □秒`, slots: [slot(mi * 60 + s, '秒')], explain: () => figFrames(minuteLine(mi * 60 + s, '秒', '分'), '1分 = 60秒 です。数直線の大きい目もりが 1分 (60秒) です。', `${mi}分 = ${mi * 60}秒。${mi * 60} + ${s} = ${mi * 60 + s}秒`) };
@@ -1354,15 +1356,15 @@ GEN.len_mix = () => {
 GEN.speed_conv = () => {
   const v = ri(0, 4);
   if (v === 0) { const X = ri(2, 30) * 3; const ans = new Fr(X * 1000, 60); if (!ans.isInt()) return GEN.speed_conv();
-    return { html: `時速 ${X} km = 分速 <b class="box">□</b> m`, text: `時速${X}km = 分速□m`, slots: [slot(ans, 'm')], explain: () => figFrames(rateFig('道のり (m)', '時間 (分)', [{ pos: 1, t: String(ans.n), b: '1', ut: true }, { pos: 60, t: String(X * 1000), b: '60' }]), `時速 ${X} km は、1時間 (60分) に ${X} km = ${X * 1000} m 進む速さです。`, `1分あたりにすると、${X * 1000} ÷ 60 = ${ans.n} m。分速 ${ans.n} m`) }; }
+    return { html: `時速 ${X} km = 分速 <b class="box">□</b> m`, text: `時速${X}km = 分速□m`, slots: [slot(ans, 'm')], units: () => [speedChain(X, 'km', '時間', [[1000, 'm', 1, 'km'], [1, '時間', 60, '分']], ans.toDec(), 'm', '分', `${X} × 1000 ÷ 60 = ${ans.toDec()}`)], explain: () => figFrames(rateFig('道のり (m)', '時間 (分)', [{ pos: 1, t: String(ans.n), b: '1', ut: true }, { pos: 60, t: String(X * 1000), b: '60' }]), `時速 ${X} km は、1時間 (60分) に ${X} km = ${X * 1000} m 進む速さです。`, `1分あたりにすると、${X * 1000} ÷ 60 = ${ans.n} m。分速 ${ans.n} m`) }; }
   if (v === 1) { const Y = ri(2, 30) * 30; const ans = new Fr(Y, 60);
-    return { html: `分速 ${Y} m = 秒速 <b class="box">□</b> m`, text: `分速${Y}m = 秒速□m`, slots: [slot(ans, 'm')], explain: () => figFrames(rateFig('道のり (m)', '時間 (秒)', [{ pos: 1, t: ans.toDec(), b: '1', ut: true }, { pos: 60, t: String(Y), b: '60' }]), `分速 ${Y} m は、1分 (60秒) に ${Y} m 進む速さです。`, `1秒あたりにすると、${Y} ÷ 60 = ${ans.toDec()} m`) }; }
+    return { html: `分速 ${Y} m = 秒速 <b class="box">□</b> m`, text: `分速${Y}m = 秒速□m`, slots: [slot(ans, 'm')], units: () => [speedChain(Y, 'm', '分', [[1, '分', 60, '秒']], ans.toDec(), 'm', '秒', `${Y} ÷ 60 = ${ans.toDec()}`)], explain: () => figFrames(rateFig('道のり (m)', '時間 (秒)', [{ pos: 1, t: ans.toDec(), b: '1', ut: true }, { pos: 60, t: String(Y), b: '60' }]), `分速 ${Y} m は、1分 (60秒) に ${Y} m 進む速さです。`, `1秒あたりにすると、${Y} ÷ 60 = ${ans.toDec()} m`) }; }
   if (v === 2) { const Z = ri(2, 30); const ans = new Fr(Z * 3600, 1000);
-    return { html: `秒速 ${Z} m = 時速 <b class="box">□</b> km`, text: `秒速${Z}m = 時速□km`, slots: [slot(ans, 'km')], explain: () => figFrames(rateFig('道のり', '時間 (秒)', [{ pos: 1, t: `${Z} m`, b: '1' }, { pos: 3600, t: `${ans.toDec()} km`, b: '3600', ut: true }]), `1時間 = 60分 = 3600秒 です。`, `1時間に進むのは ${Z} × 3600 = ${Z * 3600} m。`, `${Z * 3600} m = ${ans.toDec()} km。時速 ${ans.toDec()} km`) }; }
+    return { html: `秒速 ${Z} m = 時速 <b class="box">□</b> km`, text: `秒速${Z}m = 時速□km`, slots: [slot(ans, 'km')], units: () => [speedChain(Z, 'm', '秒', [[3600, '秒', 1, '時間'], [1, 'km', 1000, 'm']], ans.toDec(), 'km', '時間', `${Z} × 3600 ÷ 1000 = ${ans.toDec()}`)], explain: () => figFrames(rateFig('道のり', '時間 (秒)', [{ pos: 1, t: `${Z} m`, b: '1' }, { pos: 3600, t: `${ans.toDec()} km`, b: '3600', ut: true }]), `1時間 = 60分 = 3600秒 です。`, `1時間に進むのは ${Z} × 3600 = ${Z * 3600} m。`, `${Z * 3600} m = ${ans.toDec()} km。時速 ${ans.toDec()} km`) }; }
   if (v === 3) { const Y = ri(1, 20) * 50; const ans = new Fr(Y * 60, 1000);
-    return { html: `分速 ${Y} m = 時速 <b class="box">□</b> km`, text: `分速${Y}m = 時速□km`, slots: [slot(ans, 'km')], explain: () => figFrames(rateFig('道のり', '時間 (分)', [{ pos: 1, t: `${Y} m`, b: '1' }, { pos: 60, t: `${ans.toDec()} km`, b: '60', ut: true }]), '1時間 = 60分 です。', `1時間に進むのは ${Y} × 60 = ${Y * 60} m。`, `${Y * 60} m = ${ans.toDec()} km。時速 ${ans.toDec()} km`) }; }
+    return { html: `分速 ${Y} m = 時速 <b class="box">□</b> km`, text: `分速${Y}m = 時速□km`, slots: [slot(ans, 'km')], units: () => [speedChain(Y, 'm', '分', [[60, '分', 1, '時間'], [1, 'km', 1000, 'm']], ans.toDec(), 'km', '時間', `${Y} × 60 ÷ 1000 = ${ans.toDec()}`)], explain: () => figFrames(rateFig('道のり', '時間 (分)', [{ pos: 1, t: `${Y} m`, b: '1' }, { pos: 60, t: `${ans.toDec()} km`, b: '60', ut: true }]), '1時間 = 60分 です。', `1時間に進むのは ${Y} × 60 = ${Y * 60} m。`, `${Y * 60} m = ${ans.toDec()} km。時速 ${ans.toDec()} km`) }; }
   const X = ri(1, 6) * 18; const ans = new Fr(X * 1000, 3600);
-  return { html: `時速 ${X} km = 秒速 <b class="box">□</b> m`, text: `時速${X}km = 秒速□m`, slots: [slot(ans, 'm')], explain: () => figFrames(rateFig('道のり (m)', '時間 (秒)', [{ pos: 1, t: ans.toDec(), b: '1', ut: true }, { pos: 3600, t: String(X * 1000), b: '3600' }]), `時速 ${X} km は、1時間 (3600秒) に ${X * 1000} m 進む速さです。`, `1秒あたりにすると、${X * 1000} ÷ 3600 = ${ans.toDec()} m。秒速 ${ans.toDec()} m`) };
+  return { html: `時速 ${X} km = 秒速 <b class="box">□</b> m`, text: `時速${X}km = 秒速□m`, slots: [slot(ans, 'm')], units: () => [speedChain(X, 'km', '時間', [[1000, 'm', 1, 'km'], [1, '時間', 3600, '秒']], ans.toDec(), 'm', '秒', `${X} × 1000 ÷ 3600 = ${ans.toDec()}`)], explain: () => figFrames(rateFig('道のり (m)', '時間 (秒)', [{ pos: 1, t: ans.toDec(), b: '1', ut: true }, { pos: 3600, t: String(X * 1000), b: '3600' }]), `時速 ${X} km は、1時間 (3600秒) に ${X * 1000} m 進む速さです。`, `1秒あたりにすると、${X * 1000} ÷ 3600 = ${ans.toDec()} m。秒速 ${ans.toDec()} m`) };
 };
 // 二本の数直線 (速さ・単位量あたり): known = [上, 下] の組、ask = [上, 下] の組 (□ はどちらか)
 function rateFig(top, bot, pairs) {
@@ -1383,37 +1385,37 @@ GEN.speed = () => {
     let S, M, D;
     do { S = ri(4, 20) * 5; M = pick([20, 30, 40, 45, 90, 100, 150, 75, 80]); D = new Fr(S * M, 60); } while (D.decPlaces() > 1);
     const H = new Fr(M, 60);
-    return { html: `時速 ${S} km で ${minText(M)} 進むと、道のりは <b class="box">□</b> km`, text: `時速${S}kmで${minText(M)} → □km`, slots: [slot(D, 'km')], explain: () => figFrames(rateFig('道のり (km)', '時間', [{ pos: 1, t: String(S), b: '1時間' }, { pos: H.val(), t: D.toDec(), b: minText(M), ut: true }]), '道のり = 速さ × 時間 です。二本の数直線で、1時間に ${S} km 進むようすを表します。'.replace('${S}', S), `速さが「時速」なので、時間を「時間」の単位にそろえます: ${minText(M)} = ${frHTML(H, false)} 時間${H.terminating() ? ` = ${H.toDec()} 時間` : ''}`, `${S} × ${frHTML(H, false)} = ${D.toDec()} km`) };
+    return { html: `時速 ${S} km で ${minText(M)} 進むと、道のりは <b class="box">□</b> km`, text: `時速${S}kmで${minText(M)} → □km`, slots: [slot(D, 'km')], units: () => rateUnitFrames({ top: 'km', bot: '時間', rate: S, cnt: decOrFr(H), tot: D.toDec(), n: H, kind: 'total' }), explain: () => figFrames(rateFig('道のり (km)', '時間', [{ pos: 1, t: String(S), b: '1時間' }, { pos: H.val(), t: D.toDec(), b: minText(M), ut: true }]), '道のり = 速さ × 時間 です。二本の数直線で、1時間に ${S} km 進むようすを表します。'.replace('${S}', S), `速さが「時速」なので、時間を「時間」の単位にそろえます: ${minText(M)} = ${frHTML(H, false)} 時間${H.terminating() ? ` = ${H.toDec()} 時間` : ''}`, `${S} × ${frHTML(H, false)} = ${D.toDec()} km`) };
   }
   if (v === 1) {
     let V, D, T;
     do { V = ri(5, 20) * 5; T = ri(8, 40); D = new Fr(V * T, 1000); } while (D.decPlaces() > 2);
-    return { html: `${D.toDec()} km の道のりを 分速 ${V} m で歩くと、<b class="box">□</b> 分かかる`, text: `${D.toDec()}km を分速${V}m → □分`, slots: [slot(T, '分')], explain: () => figFrames(rateFig('道のり (m)', '時間 (分)', [{ pos: 1, t: String(V), b: '1' }, { pos: T, t: String(V * T), b: String(T), ub: true }]), '時間 = 道のり ÷ 速さ です。1分に ' + V + ' m 進みます。', `速さが「m」なので、道のりも m にそろえます: ${D.toDec()} km = ${V * T} m`, `${V * T} ÷ ${V} = ${T} 分`) };
+    return { html: `${D.toDec()} km の道のりを 分速 ${V} m で歩くと、<b class="box">□</b> 分かかる`, text: `${D.toDec()}km を分速${V}m → □分`, slots: [slot(T, '分')], units: () => rateUnitFrames({ top: 'm', bot: '分', rate: V, cnt: T, tot: V * T, n: T, kind: 'count' }), explain: () => figFrames(rateFig('道のり (m)', '時間 (分)', [{ pos: 1, t: String(V), b: '1' }, { pos: T, t: String(V * T), b: String(T), ub: true }]), '時間 = 道のり ÷ 速さ です。1分に ' + V + ' m 進みます。', `速さが「m」なので、道のりも m にそろえます: ${D.toDec()} km = ${V * T} m`, `${V * T} ÷ ${V} = ${T} 分`) };
   }
   if (v === 2) {
     let D, T, S;
     do { T = pick([20, 30, 40, 45, 15, 90, 120]); S = ri(3, 18) * 5; D = new Fr(S * T, 60); } while (D.decPlaces() > 1);
-    return { html: `${D.toDec()} km を ${minText(T)} で走る車の速さは、時速 <b class="box">□</b> km`, text: `${D.toDec()}kmを${minText(T)} → 時速□km`, slots: [slot(S, 'km')], explain: () => figFrames(rateFig('道のり (km)', '時間', [{ pos: 60, t: String(S), b: '1時間', ut: true }, { pos: T, t: D.toDec(), b: minText(T) }]), '速さ = 道のり ÷ 時間 です。1時間 (60分) あたりに進む道のりを求めます。', `時速を求めるので、時間を「時間」の単位にそろえます: ${minText(T)} = ${frHTML(new Fr(T, 60), false)} 時間`, `${D.toDec()} ÷ ${frHTML(new Fr(T, 60), false)} = ${S}。時速 ${S} km`, `<small>別の考え方: ${minText(T)}で ${D.toDec()} km → 60分では ${D.toDec()} × 60 ÷ ${T} = ${S} km</small>`) };
+    return { html: `${D.toDec()} km を ${minText(T)} で走る車の速さは、時速 <b class="box">□</b> km`, text: `${D.toDec()}kmを${minText(T)} → 時速□km`, slots: [slot(S, 'km')], units: () => rateUnitFrames({ top: 'km', bot: '時間', rate: S, cnt: decOrFr(new Fr(T, 60)), tot: D.toDec(), n: new Fr(T, 60), kind: 'per', word: '時速' }), explain: () => figFrames(rateFig('道のり (km)', '時間', [{ pos: 60, t: String(S), b: '1時間', ut: true }, { pos: T, t: D.toDec(), b: minText(T) }]), '速さ = 道のり ÷ 時間 です。1時間 (60分) あたりに進む道のりを求めます。', `時速を求めるので、時間を「時間」の単位にそろえます: ${minText(T)} = ${frHTML(new Fr(T, 60), false)} 時間`, `${D.toDec()} ÷ ${frHTML(new Fr(T, 60), false)} = ${S}。時速 ${S} km`, `<small>別の考え方: ${minText(T)}で ${D.toDec()} km → 60分では ${D.toDec()} × 60 ÷ ${T} = ${S} km</small>`) };
   }
   let V, T, D;
   do { V = ri(3, 20) * 10; T = ri(5, 45); D = new Fr(V * T, 1000); } while (D.decPlaces() > 2);
-  return { html: `分速 ${V} m で ${T} 分 進むと、道のりは <b class="box">□</b> km`, text: `分速${V}mで${T}分 → □km`, slots: [slot(D, 'km')], explain: () => figFrames(rateFig('道のり (m)', '時間 (分)', [{ pos: 1, t: String(V), b: '1' }, { pos: T, t: String(V * T), b: String(T), ut: true }]), '道のり = 速さ × 時間 です。', `${V} × ${T} = ${V * T} m`, `答えは km なので、${V * T} m = ${D.toDec()} km`) };
+  return { html: `分速 ${V} m で ${T} 分 進むと、道のりは <b class="box">□</b> km`, text: `分速${V}mで${T}分 → □km`, slots: [slot(D, 'km')], units: () => [...rateUnitFrames({ top: 'm', bot: '分', rate: V, cnt: T, tot: V * T, n: T, kind: 'total' }), convUnitFrame(V * T, 'm', D.toDec(), 'km', [1, 'km'], [1000, 'm'], `${V * T} ÷ 1000 = ${D.toDec()}`)], explain: () => figFrames(rateFig('道のり (m)', '時間 (分)', [{ pos: 1, t: String(V), b: '1' }, { pos: T, t: String(V * T), b: String(T), ut: true }]), '道のり = 速さ × 時間 です。', `${V} × ${T} = ${V * T} m`, `答えは km なので、${V * T} m = ${D.toDec()} km`) };
 };
 GEN.per_unit = () => {
   const v = ri(0, 2);
   if (v === 0) { const N = pick(['2', '3', '4', '5', '6', '1.5', '2.5', '0.8']); const u = ri(3, 30) * 10; const P = Fr.dec(N).mul(u); if (!P.isInt()) return GEN.per_unit();
-    return { html: `${N} m で ${P.n} 円のリボン。1 m あたりのねだんは <b class="box">□</b> 円`, text: `${N}mで${P.n}円 → 1mあたり□円`, slots: [slot(u, '円')], explain: () => figFrames(rateFig('代金 (円)', '長さ (m)', [{ pos: 1, t: String(u), b: '1', ut: true }, { pos: N, t: String(P.n), b: String(N) }]), '1あたりの量 = 全体の量 ÷ いくつ分 です。数直線で、${N} m から 1 m にもどります。'.replace('${N}', N), `${P.n} ÷ ${N} = ${u} 円`) }; }
+    return { html: `${N} m で ${P.n} 円のリボン。1 m あたりのねだんは <b class="box">□</b> 円`, text: `${N}mで${P.n}円 → 1mあたり□円`, slots: [slot(u, '円')], units: () => rateUnitFrames({ top: '円', bot: 'm', rate: u, cnt: N, tot: P.n, n: Fr.dec(N), kind: 'per' }), explain: () => figFrames(rateFig('代金 (円)', '長さ (m)', [{ pos: 1, t: String(u), b: '1', ut: true }, { pos: N, t: String(P.n), b: String(N) }]), '1あたりの量 = 全体の量 ÷ いくつ分 です。数直線で、${N} m から 1 m にもどります。'.replace('${N}', N), `${P.n} ÷ ${N} = ${u} 円`) }; }
   if (v === 1) { const A = ri(4, 40); const dns = ri(5, 90) * 10; const B = A * dns;
-    return { html: `面積 ${A} km² の町に ${B} 人が住んでいます。人口密度 (1 km² あたりの人数) は <b class="box">□</b> 人`, text: `${A}km²に${B}人 → 人口密度□人`, slots: [slot(dns, '人')], explain: () => figFrames(rateFig('人数 (人)', '面積 (km²)', [{ pos: 1, t: String(dns), b: '1', ut: true }, { pos: A, t: String(B), b: String(A) }]), '人口密度 = 人数 ÷ 面積 (km²) です。1 km² あたりの人数を求めます。', `${B} ÷ ${A} = ${dns} 人`) }; }
+    return { html: `面積 ${A} km² の町に ${B} 人が住んでいます。人口密度 (1 km² あたりの人数) は <b class="box">□</b> 人`, text: `${A}km²に${B}人 → 人口密度□人`, slots: [slot(dns, '人')], units: () => rateUnitFrames({ top: '人', bot: 'km²', rate: dns, cnt: A, tot: B, n: A, kind: 'per', word: '人口密度' }), explain: () => figFrames(rateFig('人数 (人)', '面積 (km²)', [{ pos: 1, t: String(dns), b: '1', ut: true }, { pos: A, t: String(B), b: String(A) }]), '人口密度 = 人数 ÷ 面積 (km²) です。1 km² あたりの人数を求めます。', `${B} ÷ ${A} = ${dns} 人`) }; }
   const L = ri(5, 40); const k = ri(8, 25); const D = L * k;
-  return { html: `ガソリン ${L} L で ${D} km 走る車。1 L あたり <b class="box">□</b> km 走る`, text: `${L}Lで${D}km → 1Lあたり□km`, slots: [slot(k, 'km')], explain: () => figFrames(rateFig('道のり (km)', 'ガソリン (L)', [{ pos: 1, t: String(k), b: '1', ut: true }, { pos: L, t: String(D), b: String(L) }]), '1 L あたりの道のり = 道のり ÷ ガソリンの量 です。', `${D} ÷ ${L} = ${k} km`) };
+  return { html: `ガソリン ${L} L で ${D} km 走る車。1 L あたり <b class="box">□</b> km 走る`, text: `${L}Lで${D}km → 1Lあたり□km`, slots: [slot(k, 'km')], units: () => rateUnitFrames({ top: 'km', bot: 'L', rate: k, cnt: L, tot: D, n: L, kind: 'per' }), explain: () => figFrames(rateFig('道のり (km)', 'ガソリン (L)', [{ pos: 1, t: String(k), b: '1', ut: true }, { pos: L, t: String(D), b: String(L) }]), '1 L あたりの道のり = 道のり ÷ ガソリンの量 です。', `${D} ÷ ${L} = ${k} km`) };
 };
 GEN.per_total = () => {
   const v = ri(0, 1);
   if (v === 0) { const u = ri(4, 40) * 5; const N = pick(['2.4', '3.5', '1.2', '0.6', '4', '2.5', '1.8']); const P = Fr.dec(N).mul(u); if (!P.isInt()) return GEN.per_total();
-    return { html: `1 m あたり ${u} 円のロープを ${N} m 買うと、代金は <b class="box">□</b> 円`, text: `1mあたり${u}円 × ${N}m → □円`, slots: [slot(P, '円')], explain: () => figFrames(rateFig('代金 (円)', '長さ (m)', [{ pos: 1, t: String(u), b: '1' }, { pos: Fr.dec(String(N)).val(), t: String(P.n), b: String(N), ut: true }]), '全体の量 = 1あたりの量 × いくつ分 です。', `${u} × ${N} = ${P.n} 円`) }; }
+    return { html: `1 m あたり ${u} 円のロープを ${N} m 買うと、代金は <b class="box">□</b> 円`, text: `1mあたり${u}円 × ${N}m → □円`, slots: [slot(P, '円')], units: () => rateUnitFrames({ top: '円', bot: 'm', rate: u, cnt: N, tot: P.n, n: Fr.dec(N), kind: 'total' }), explain: () => figFrames(rateFig('代金 (円)', '長さ (m)', [{ pos: 1, t: String(u), b: '1' }, { pos: Fr.dec(String(N)).val(), t: String(P.n), b: String(N), ut: true }]), '全体の量 = 1あたりの量 × いくつ分 です。', `${u} × ${N} = ${P.n} 円`) }; }
   const u = ri(4, 40) * 5; const N = pick(['2.4', '3.5', '1.2', '0.6', '4', '2.5', '1.8', '6']); const P = Fr.dec(N).mul(u); if (!P.isInt()) return GEN.per_total();
-  return { html: `1 m あたり ${u} 円のロープを ${P.n} 円分買うと、長さは <b class="box">□</b> m`, text: `1mあたり${u}円で${P.n}円分 → □m`, slots: [slot(Fr.dec(N), 'm')], explain: () => figFrames(rateFig('代金 (円)', '長さ (m)', [{ pos: 1, t: String(u), b: '1' }, { pos: Fr.dec(String(N)).val(), t: String(P.n), b: String(N), ub: true }]), 'いくつ分 = 全体の量 ÷ 1あたりの量 です。', `${P.n} ÷ ${u} = ${N} m`) };
+  return { html: `1 m あたり ${u} 円のロープを ${P.n} 円分買うと、長さは <b class="box">□</b> m`, text: `1mあたり${u}円で${P.n}円分 → □m`, slots: [slot(Fr.dec(N), 'm')], units: () => rateUnitFrames({ top: '円', bot: 'm', rate: u, cnt: N, tot: P.n, n: Fr.dec(N), kind: 'count' }), explain: () => figFrames(rateFig('代金 (円)', '長さ (m)', [{ pos: 1, t: String(u), b: '1' }, { pos: Fr.dec(String(N)).val(), t: String(P.n), b: String(N), ub: true }]), 'いくつ分 = 全体の量 ÷ 1あたりの量 です。', `${P.n} ÷ ${u} = ${N} m`) };
 };
 GEN.compare = () => {
   const v = ri(0, 1);
@@ -1423,16 +1425,215 @@ GEN.compare = () => {
     const ans = r1.cmp(r2) > 0 ? 'A' : 'B';
     const fmtR = (r) => (r.decPlaces() <= 3 ? r.toDec() : (Math.floor(r.val() * 1000) / 1000).toFixed(3) + '…');
     const d1 = fmtR(r1), d2 = fmtR(r2);
-    return { html: `A の部屋: ${a1} m² に ${p1} 人<br>B の部屋: ${a2} m² に ${p2} 人`, text: `A:${a1}m²に${p1}人 / B:${a2}m²に${p2}人`, lead: 'こんでいるのはどちら？', choices: [{ id: 'A', html: 'A の部屋' }, { id: 'B', html: 'B の部屋' }], answerChoice: ans, slots: [], explain: () => figFrames(figTable(['', '面積 (m²)', '人数 (人)', '1 m² あたり (人)'], [['A', a1, p1, `<b>${d1}</b>`], ['B', a2, p2, `<b>${d2}</b>`]]) + figBars([{ s: 'A', v: r1.val(), label: d1 }, { s: 'B', v: r2.val(), label: d2, cls: 'sh3' }], ' 人/m²'), '面積も人数もちがうので、表のいちばん右の列「1 m² あたりの人数」にそろえてくらべます。', `A: ${p1} ÷ ${a1} = ${d1} 人<br>B: ${p2} ÷ ${a2} = ${d2} 人`, `1 m² あたりの人数が多い ${ans} のほうがこんでいます。<br><small>「1人あたりの面積」でくらべることもできます。その場合は、面積が小さいほうがこんでいます。</small>`) };
+    return { html: `A の部屋: ${a1} m² に ${p1} 人<br>B の部屋: ${a2} m² に ${p2} 人`, text: `A:${a1}m²に${p1}人 / B:${a2}m²に${p2}人`, lead: 'こんでいるのはどちら？', choices: [{ id: 'A', html: 'A の部屋' }, { id: 'B', html: 'B の部屋' }], answerChoice: ans, slots: [], units: () => [compareUnitFrame('人', 'm²', [[ 'A', p1, a1, d1], ['B', p2, a2, d2]])], explain: () => figFrames(figTable(['', '面積 (m²)', '人数 (人)', '1 m² あたり (人)'], [['A', a1, p1, `<b>${d1}</b>`], ['B', a2, p2, `<b>${d2}</b>`]]) + figBars([{ s: 'A', v: r1.val(), label: d1 }, { s: 'B', v: r2.val(), label: d2, cls: 'sh3' }], ' 人/m²'), '面積も人数もちがうので、表のいちばん右の列「1 m² あたりの人数」にそろえてくらべます。', `A: ${p1} ÷ ${a1} = ${d1} 人<br>B: ${p2} ÷ ${a2} = ${d2} 人`, `1 m² あたりの人数が多い ${ans} のほうがこんでいます。<br><small>「1人あたりの面積」でくらべることもできます。その場合は、面積が小さいほうがこんでいます。</small>`) };
   }
   let n1, y1, n2, y2, r1, r2;
   do { n1 = ri(2, 6); n2 = ri(2, 8); y1 = n1 * ri(30, 120); y2 = n2 * ri(30, 120); r1 = new Fr(y1, n1); r2 = new Fr(y2, n2); } while (r1.cmp(r2) === 0 || n1 === n2);
   const ans = r1.cmp(r2) < 0 ? 'A' : 'B';
-  return { html: `A: えんぴつ ${n1} 本で ${y1} 円<br>B: えんぴつ ${n2} 本で ${y2} 円`, text: `A:${n1}本${y1}円 / B:${n2}本${y2}円`, lead: '1本あたりが安いのはどちら？', choices: [{ id: 'A', html: 'A' }, { id: 'B', html: 'B' }], answerChoice: ans, slots: [], explain: () => figFrames(figTable(['', '本数', '代金 (円)', '1本あたり (円)'], [['A', n1, y1, `<b>${r1.n}</b>`], ['B', n2, y2, `<b>${r2.n}</b>`]]) + figBars([{ s: 'A', v: r1.val(), label: String(r1.n) }, { s: 'B', v: r2.val(), label: String(r2.n), cls: 'sh3' }], ' 円'), '本数がちがうので、表のいちばん右の列「1本あたりのねだん」にそろえてくらべます。', `A: ${y1} ÷ ${n1} = ${r1.n} 円<br>B: ${y2} ÷ ${n2} = ${r2.n} 円`, `1本あたりが安いのは ${ans} です。`) };
+  return { html: `A: えんぴつ ${n1} 本で ${y1} 円<br>B: えんぴつ ${n2} 本で ${y2} 円`, text: `A:${n1}本${y1}円 / B:${n2}本${y2}円`, lead: '1本あたりが安いのはどちら？', choices: [{ id: 'A', html: 'A' }, { id: 'B', html: 'B' }], answerChoice: ans, slots: [], units: () => [compareUnitFrame('円', '本', [['A', y1, n1, String(r1.n)], ['B', y2, n2, String(r2.n)]])], explain: () => figFrames(figTable(['', '本数', '代金 (円)', '1本あたり (円)'], [['A', n1, y1, `<b>${r1.n}</b>`], ['B', n2, y2, `<b>${r2.n}</b>`]]) + figBars([{ s: 'A', v: r1.val(), label: String(r1.n) }, { s: 'B', v: r2.val(), label: String(r2.n), cls: 'sh3' }], ' 円'), '本数がちがうので、表のいちばん右の列「1本あたりのねだん」にそろえてくらべます。', `A: ${y1} ÷ ${n1} = ${r1.n} 円<br>B: ${y2} ÷ ${n2} = ${r2.n} 円`, `1本あたりが安いのは ${ans} です。`) };
 };
 
 // ===== 読みもの: 計算の順番のわけ =====
 // テープ図: rows = [{ s, segs: [{ w, s, cls }], braces: [{ from, to, s, side }], total }]  w は量 (同じ図の中で同じ縮尺)
+// ===== 単位も計算する (単位を式に入れる) =====
+// 単位つきの量: a au / b bu (b が null なら分数にしない)
+function uq(a, au, b = null, bu = '') { return { a: a === '' ? '' : String(a), au: au || '', b: b == null ? null : String(b), bu: bu || '' }; }
+const uSpan = (s, x) => (s ? `<span class="u${x ? ' ux' : ''}">${s}</span>` : '');
+function uqHTML(q, xa, xb) {
+  const num = (x) => (x ? `<span class="n">${x}</span>` : '');
+  const top = `${num(q.a)}${uSpan(q.au, xa)}` || '1';
+  if (q.b == null) return `<span class="uq">${top}</span>`;
+  return `<span class="uqf"><span class="t">${top}</span><span class="d">${num(q.b)}${uSpan(q.bu, xb)}</span></span>`;
+}
+// かけ算の列。上と下に同じ単位があれば、約分のように消す (線で消す)
+function mulChain(qs) {
+  const xa = qs.map(() => false), xb = qs.map(() => false);
+  qs.forEach((q, i) => { if (q.b == null || !q.bu) return; const j = qs.findIndex((t, k) => t.au === q.bu && !xa[k]); if (j >= 0) { xa[j] = true; xb[i] = true; } });
+  return qs.map((q, i) => uqHTML(q, xa[i], xb[i])).join(' <span class="op">×</span> ');
+}
+const decOrFr = (f) => (f.terminating() ? f.toDec() : frText(f));
+const uop = (s) => ` <span class="op">${s}</span> `;
+// 「数」「単位」などの行を並べた表
+function ueq(rows, cap) {
+  return (cap ? `<div class="figcap">${cap}</div>` : '') + `<div class="ueq">${rows.map(([lb, h, cls]) => `<div class="ueq-row${cls ? ' ' + cls : ''}"><span class="ueq-lb">${lb}</span><span class="ueq-body">${h}</span></div>`).join('')}</div>`;
+}
+// 1あたりの箱の図: 「1 bu」の箱に each ずつ入っている。それが n 箱分で total
+function figPerBox(o) {
+  const W = 540, x0 = 40, TW = 440, cube = !!o.cube;
+  const n = Fr.of(o.n).val(); const whole = Math.floor(n + 1e-9), part = n - whole;
+  const many = Math.ceil(n - 1e-9) > 7;
+  const boxes = []; // [幅の割合, ラベルあり?]
+  if (many) { boxes.push([1], [1], [1], ['gap'], [1]); } else { for (let i = 0; i < whole; i++) boxes.push([1]); if (part > 1e-9) boxes.push([part]); }
+  const units = boxes.reduce((a, b) => a + (b[0] === 'gap' ? 0.6 : b[0]), 0);
+  const bw = Math.min(140, (TW - (cube ? 14 : 0)) / units); const bh = cube ? 64 : 52; const y0 = cube ? 58 : 44; const dz = cube ? 12 : 0;
+  let b = ''; let x = x0;
+  boxes.forEach(([w], i) => {
+    if (w === 'gap') { b += svgText(x + bw * 0.3, y0 + bh / 2 + 5, '…', 'b'); x += bw * 0.6; return; }
+    const ww = w * bw;
+    if (cube) b += `<path class="sh3" d="M${r1(x)} ${y0} l${dz} ${-dz} l${r1(ww)} 0 l${-dz} ${dz} z"/><path class="sh3" d="M${r1(x + ww)} ${y0} l${dz} ${-dz} l0 ${bh} l${-dz} ${dz} z"/>`;
+    b += `<rect class="${w < 1 ? 'sh3' : 'sh'}" x="${r1(x)}" y="${y0}" width="${r1(ww)}" height="${bh}"/>`;
+    if (w >= 1 && ww >= 44) b += svgText(x + ww / 2, y0 + bh / 2 + 6, o.each, ww < 70 ? 's' : 'b');
+    if (i === 0) b += svgText(x + ww / 2, y0 + bh + 18, o.per, 'm');
+    x += ww;
+  });
+  const xe = x;
+  // 全体のかっこ (上に全体の量、下にいくつ分)
+  const brace = (xa, xb, y, d, s, cls) => `<path class="ac" d="M${r1(xa)} ${y} q0 ${d} 8 ${d} L${r1((xa + xb) / 2 - 8)} ${y + d} q8 0 8 ${d} q0 ${-d} 8 ${-d} L${r1(xb - 8)} ${y + d} q8 0 8 ${-d}"/>` + svgText((xa + xb) / 2, d < 0 ? y + 2 * d - 6 : y + 2 * d + 14, s, cls);
+  b += brace(x0 + 2, xe - 2, y0 - dz - 4, -8, o.total, o.ask === 'total' ? 'm' : 'b');
+  b += brace(x0 + 2, xe - 2, y0 + bh + 26, 8, o.count, o.ask === 'count' ? 'm' : 'b');
+  if (o.note) b += svgText(W - 8, y0 + bh + 72, o.note, 's', 'end');
+  return svgBox(W, y0 + bh + (o.note ? 80 : 64), b, o.label || '1あたりの箱の図');
+}
+// ある「1あたり」の問題を、箱の図 + 単位の式 + 数の式 の3つの見方で
+// r: { top, bot } 単位。kind: 'per' (全体÷いくつ分) | 'total' (1あたり×いくつ分) | 'count' (全体÷1あたり)
+function rateUnitFrames(r) {
+  const { top, bot, rate, cnt, tot, kind, word } = r; // rate, cnt, tot は表示用文字列
+  const perQ = uq(rate, top, 1, bot);
+  const box = figPerBox({ n: r.n, each: `${rate} ${top}`, per: `1 ${bot}`, total: `全体 ${tot} ${top}`, count: `${cnt} ${bot} ぶん`, ask: kind === 'per' ? null : kind === 'total' ? 'total' : 'count', cube: r.cube, label: `1 ${bot} あたりの箱の図` });
+  if (kind === 'per') {
+    return [
+      { fig: box, text: `全体の ${tot} ${top} を、1 ${bot} ずつの箱に 同じだけ分けると考えます。箱 1つ分が「1 ${bot} あたり」${word ? ` (${word})` : ''}です。` },
+      { fig: ueq([['数', `${tot} ÷ ${cnt} = <b>${rate}</b>`], ['単位', `${uqHTML(uq('', top))}${uop('÷')}${uqHTML(uq('', bot))}${uop('=')}${uqHTML(uq('', top, '', bot))}`], ['あわせて', `${uqHTML(uq(tot, top))}${uop('÷')}${uqHTML(uq(cnt, bot))}${uop('=')}${uqHTML(perQ)}`, 'all']], '数も単位も、同じように計算します'),
+        text: `単位も式に入れて計算します。${top} を ${bot} でわると、単位は <b>${top}/${bot}</b> (「1 ${bot} あたり何 ${top}」と読みます)。<br>答えの単位を見れば、「1 ${bot} あたり」を求めたことが分かります。`, lesson: 'unit' },
+    ];
+  }
+  if (kind === 'total') {
+    return [
+      { fig: box, text: `1 ${bot} の箱に ${rate} ${top} ずつ。その箱が ${cnt} 箱分あると考えます。` },
+      { fig: ueq([['数', `${rate} × ${cnt} = <b>${tot}</b>`], ['単位', `${mulChain([uq('', top, '', bot), uq('', bot)])}${uop('=')}${uqHTML(uq('', top))}`], ['あわせて', `${mulChain([perQ, uq(cnt, bot)])}${uop('=')}${uqHTML(uq(tot, top))}`, 'all']], '数も単位も、同じように計算します'),
+        text: `${top}/${bot} に ${bot} をかけると、下の ${bot} と かけた ${bot} が 分数の約分のように消えて、<b>${top}</b> がのこります。<br>求めたい「${top}」が のこるので、この式で正しいと たしかめられます。`, lesson: 'unit' },
+    ];
+  }
+  return [
+    { fig: box, text: `1 ${bot} の箱に ${rate} ${top} ずつ。全体の ${tot} ${top} は、箱 何こ分 かを考えます。` },
+    { fig: ueq([['数', `${tot} ÷ ${rate} = <b>${cnt}</b>`], ['単位', `${uqHTML(uq('', top))}${uop('÷')}${uqHTML(uq('', top, '', bot))}${uop('=')}${mulChain([uq('', top), uq('', bot, '', top)])}${uop('=')}${uqHTML(uq('', bot))}`], ['あわせて', `${uqHTML(uq(tot, top))}${uop('÷')}${uqHTML(perQ)}${uop('=')}${uqHTML(uq(cnt, bot))}`, 'all']], '数も単位も、同じように計算します'),
+      text: `${top}/${bot} でわるのは、分数のわり算と同じで、ひっくり返した ${bot}/${top} をかけることです。${top} が消えて <b>${bot}</b> がのこります。<br>求めたい「${bot}」が のこるので、この式で正しいと たしかめられます。`, lesson: 'unit' },
+  ];
+}
+// 単位のかんさんを、「1 と同じ大きさの分数」をかける式で
+function convUnitFrame(from, fromU, to, toU, factorTop, factorBot, numText) {
+  const f = uq(factorTop[0], factorTop[1], factorBot[0], factorBot[1]);
+  return { fig: ueq([['かんさんの もと', `${uqHTML(uq(factorBot[0], factorBot[1]))}${uop('=')}${uqHTML(uq(factorTop[0], factorTop[1]))} なので ${uqHTML(f)}${uop('=')}1`], ['単位の式', `${mulChain([uq(from, fromU), f])}${uop('=')}${uqHTML(uq(to, toU))}`, 'all'], ['数', numText]], '単位を式に入れて かんさん'),
+    text: `${factorBot[0]} ${factorBot[1]} と ${factorTop[0]} ${factorTop[1]} は同じ量なので、分数 ${factorTop[0]} ${factorTop[1]}/${factorBot[0]} ${factorBot[1]} は「1」と同じ大きさです。1 をかけても量は変わらず、<b>${fromU} が上と下で消えて ${toU} がのこります</b>。<br>どちらの分数をかけるかは、消したい単位 (${fromU}) が下に来るほうを えらべば決まります。`, lesson: 'unit' };
+}
+// 速さの単位のかんさん: 「1」と同じ分数をならべて、いらない単位を消す
+function speedChain(a, au, bu, factors, res, ru, rbu, numText) {
+  const qs = [uq(a, au, 1, bu), ...factors.map(([ta, tu, ba, bb]) => uq(ta, tu, ba, bb))];
+  return { fig: ueq([['単位の式', `${mulChain(qs)}${uop('=')}${uqHTML(uq(res, ru, 1, rbu))}`, 'all'], ['数', numText]], '「1」と同じ分数をかけて、単位を入れかえる'),
+    text: `${factors.map(([ta, tu, ba, bb]) => `${ba} ${bb} = ${ta} ${tu}`).join('、')} なので、それぞれの分数は「1」と同じ大きさです。消したい単位が 上と下に来るように分数をならべると、<b>${ru}/${rbu}</b> がのこります。<br>のこった単位を見て、${rbu === '時間' ? '時速' : rbu === '分' ? '分速' : '秒速'} ${res} ${ru} と分かります。`, lesson: 'unit' };
+}
+// くらべる問題: 両方を同じ「1あたり」の単位にして、単位ごと くらべる
+function compareUnitFrame(top, bot, rows) {
+  return { fig: ueq(rows.map(([id, t, b, r]) => [id, `${uqHTML(uq(t, top))}${uop('÷')}${uqHTML(uq(b, bot))}${uop('=')}${uqHTML(uq(r, top, 1, bot))}`, 'all']), `どちらも ${top}/${bot} にそろえる`),
+    text: `どちらも ${top} ÷ ${bot} で、同じ単位 <b>${top}/${bot}</b> (1 ${bot} あたり何 ${top}) になりました。単位がそろったので、数の大きさで くらべられます。`, lesson: 'unit' };
+}
+// 何かの「1あたり」の単位 (km/時間 など) を求めたり使ったりする問題
+const RATE_SETS = [
+  { top: 'km', bot: '時間', name: '速さ', w: '時速' }, { top: 'm', bot: '分', name: '速さ', w: '分速' },
+  { top: 'g', bot: 'cm³', name: '密度' }, { top: '人', bot: 'km²', name: '人口密度' },
+  { top: '円', bot: 'm', name: '1 m あたりのねだん' }, { top: 'km', bot: 'L', name: '1 L で走る道のり' }, { top: '円', bot: 'kg', name: '1 kg あたりのねだん' },
+];
+const unitHTML = (top, bot, x) => uqHTML(uq('', top, bot ? '' : null, bot || ''));
+// 単位の かけ算・わり算のこたえ
+GEN.unit_of = () => {
+  const R = pick(RATE_SETS); const { top, bot } = R; const v = ri(0, 2);
+  let qh, qt, ans, why;
+  const per = uqHTML(uq('', top, '', bot));
+  if (v === 0) { qh = `${uqHTML(uq('□', top))}${uop('÷')}${uqHTML(uq('△', bot))}`; qt = `${top} ÷ ${bot}`; ans = 'per'; }
+  else if (v === 1) { qh = `${uqHTML(uq('□', top, 1, bot))}${uop('×')}${uqHTML(uq('△', bot))}`; qt = `${top}/${bot} × ${bot}`; ans = 'top'; }
+  else { qh = `${uqHTML(uq('□', top))}${uop('÷')}${uqHTML(uq('△', top, 1, bot))}`; qt = `${top} ÷ ${top}/${bot}`; ans = 'bot'; }
+  const opts = { per: per, top: unitHTML(top), bot: unitHTML(bot), inv: uqHTML(uq('', bot, '', top)), sq: `<span class="uq">${uSpan(top)} × ${uSpan(bot)}</span>` };
+  const ids = shuffle(['per', 'top', 'bot', ...(v === 0 ? ['inv'] : ['sq'])]).slice(0, 3); if (!ids.includes(ans)) ids[0] = ans;
+  const choices = shuffle(ids).map((id) => ({ id, html: opts[id], text: id === 'per' ? `${top}/${bot}` : id === 'top' ? top : id === 'bot' ? bot : id === 'inv' ? `${bot}/${top}` : `${top}×${bot}` }));
+  const unitRow = v === 0 ? `${unitHTML(top)}${uop('÷')}${unitHTML(bot)}${uop('=')}${per}`
+    : v === 1 ? `${mulChain([uq('', top, '', bot), uq('', bot)])}${uop('=')}${unitHTML(top)}`
+      : `${unitHTML(top)}${uop('÷')}${per}${uop('=')}${mulChain([uq('', top), uq('', bot, '', top)])}${uop('=')}${unitHTML(bot)}`;
+  why = v === 0 ? `${top} を ${bot} でわると、「1 ${bot} あたり何 ${top}」という新しい単位 <b>${top}/${bot}</b> ができます${R.w ? ` (${R.w}のこと)` : ''}。`
+    : v === 1 ? `${top}/${bot} の下の ${bot} と、かけた ${bot} が約分のように消えて、<b>${top}</b> がのこります。`
+      : `${top}/${bot} でわるのは、ひっくり返した ${bot}/${top} をかけるのと同じです。${top} が消えて <b>${bot}</b> がのこります。`;
+  const ex = { 'per': `${R.name}`, 'top': '全体の量', 'bot': 'いくつ分' }[ans];
+  const box = figPerBox({ n: 3, each: `□ ${top}`, per: `1 ${bot}`, total: `全体 (${top})`, count: `いくつ分 (${bot})`, ask: ans === 'top' ? 'total' : ans === 'bot' ? 'count' : null, label: `1 ${bot} あたりの箱の図` });
+  return { html: `この計算の答えの単位は？<div class="expr">${qh}</div>`, text: `${qt} の単位は？`, lead: '答えの単位をえらぼう (□ △ は数)', choices, answerChoice: ans, slots: [],
+    explain: () => [
+      { fig: ueq([['単位', unitRow, 'all']], '数のかわりに 単位だけを計算する'), text: why, lesson: 'unit' },
+      { fig: box, text: `箱の図で見ると、答えは「${ex}」にあたります。単位が合っていれば、何を求めたのかが分かります。` },
+    ] };
+};
+// 式をえらぶ: 単位で正しい式をたしかめる
+GEN.unit_check = () => {
+  const cases = [
+    () => { const S = ri(3, 12) * 5, H = ri(2, 5); return { story: `時速 ${S} km で ${H} 時間 走りました。道のりは？`, a: uq(S, 'km', 1, '時間'), b: uq(H, '時間'), want: 'km', top: 'km', bot: '時間', ans: 'mul', val: S * H }; },
+    () => { const V = ri(6, 9) * 10, T = ri(4, 15); return { story: `${V * T} m の道のりを 分速 ${V} m で歩きます。かかる時間は？`, a: uq(V * T, 'm'), b: uq(V, 'm', 1, '分'), want: '分', top: 'm', bot: '分', ans: 'div', val: T }; },
+    () => { const d = pick(['2.7', '7.9', '0.9', '8.9']), V = ri(2, 20); return { story: `1 cm³ あたり ${d} g の金属が ${V} cm³ あります。重さは？`, a: uq(d, 'g', 1, 'cm³'), b: uq(V, 'cm³'), want: 'g', top: 'g', bot: 'cm³', ans: 'mul', val: Fr.dec(d).mul(V).toDec() }; },
+    () => { const p = ri(3, 9) * 100, A = ri(2, 9); return { story: `面積 ${A} km² に ${p * A} 人が住んでいます。人口密度 (1 km² あたりの人数) は？`, a: uq(p * A, '人'), b: uq(A, 'km²'), want: '人/km²', top: '人', bot: 'km²', ans: 'div', val: p, per: true }; },
+    () => { const u = ri(4, 20) * 10, N = ri(2, 9); return { story: `1 m あたり ${u} 円のリボンを ${u * N} 円分 買います。長さは？`, a: uq(u * N, '円'), b: uq(u, '円', 1, 'm'), want: 'm', top: '円', bot: 'm', ans: 'div', val: N }; },
+  ];
+  const C = pick(cases)();
+  const { a, b } = C;
+  // 3つの式と、その単位
+  const ua = (q) => (q.b == null ? q.au : `${q.au}/${q.bu}`);
+  const resUnit = { mul: '', div: '', rdiv: '' };
+  const simp = (num, den) => { const n = num.slice(), d = den.slice(); for (let i = d.length - 1; i >= 0; i--) { const j = n.indexOf(d[i]); if (j >= 0) { n.splice(j, 1); d.splice(i, 1); } } const t = n.length ? n.join('×') : '1'; return d.length ? `${t}/${d.join('×')}` : t; };
+  const nd = (q) => [q.b == null ? [q.au] : [q.au], q.b == null ? [] : [q.bu]];
+  const [an, ad] = nd(a), [bn, bd] = nd(b);
+  resUnit.mul = simp([...an, ...bn], [...ad, ...bd]); resUnit.div = simp([...an, ...bd], [...ad, ...bn]); resUnit.rdiv = simp([...bn, ...ad], [...bd, ...an]);
+  const want = C.want;
+  const fmt = (q) => q.a;
+  const exprs = { mul: `${fmt(a)} × ${fmt(b)}`, div: `${fmt(a)} ÷ ${fmt(b)}`, rdiv: `${fmt(b)} ÷ ${fmt(a)}` };
+  const ok = Object.keys(exprs).filter((k) => resUnit[k] === want);
+  const ans = ok.includes(C.ans) ? C.ans : ok[0];
+  const choices = shuffle(['mul', 'div', 'rdiv']).map((id) => ({ id, html: exprs[id], text: exprs[id] }));
+  const uShow = (s) => s.split('/').length === 2 ? uqHTML(uq('', s.split('/')[0], '', s.split('/')[1])) : unitHTML(s);
+  const tbl = figTable(['式', '単位の計算', 'のこる単位', ''], ['mul', 'div', 'rdiv'].map((k) => [exprs[k], `${ua(k === 'rdiv' ? b : a)} ${k === 'mul' ? '×' : '÷'} ${ua(k === 'rdiv' ? a : b)}`, resUnit[k], resUnit[k] === want ? '<b>○ ほしい単位</b>' : '×']));
+  return { html: `${C.story}<br>正しい式はどれ？`, text: `${C.story} 式は？`, lead: '単位で たしかめて えらぼう', choices, answerChoice: ans, slots: [],
+    explain: () => [
+      { fig: tbl, text: `3つの式に、数といっしょに単位も入れて計算してみます。ほしいのは <b>${want}</b> の単位です。<br><small>単位がおかしい式 (km×時間 など) は、お話に合わない計算です。</small>`, lesson: 'unit' },
+      { fig: ueq([['単位', `${ans === 'mul' ? mulChain([a, b].map((q) => ({ ...q, a: '', b: q.b == null ? null : '' }))) : ans === 'div' ? `${uShow(ua(a))}${uop('÷')}${uShow(ua(b))}` : `${uShow(ua(b))}${uop('÷')}${uShow(ua(a))}`}${uop('=')}${uShow(want)}`, 'all'], ['数', `${exprs[ans]} = <b>${C.val}</b>`]], '正しい式'),
+        text: `正しいのは <b>${exprs[ans]}</b>。答えは ${C.val} ${want} です。` },
+    ] };
+};
+const MATERIALS = [['鉄', '7.9'], ['アルミニウム', '2.7'], ['銅', '8.9'], ['氷', '0.9'], ['ガラス', '2.5'], ['金', '19.3']];
+GEN.density = () => {
+  const [m, d] = pick(MATERIALS); const V = ri(2, 30); const D = Fr.dec(d); const M = D.mul(V); const v = ri(0, 2);
+  const base = { top: 'g', bot: 'cm³', rate: d, cnt: String(V), tot: M.toDec(), n: V, cube: true, word: '密度' };
+  const intro = `<small>1 cm³ (1辺 1 cm の立方体) あたりの重さを「密度」といいます。単位は g/cm³ です。${m}の密度は およそ ${d} g/cm³ です。</small>`;
+  if (v === 0) return { html: `体積 ${V} cm³ で、重さ ${M.toDec()} g の${m}のかたまり。密度 (1 cm³ あたりの重さ) は <b class="box">□</b> g/cm³`, text: `${V}cm³で${M.toDec()}g → □g/cm³`, slots: [slot(D, 'g/cm³')],
+    explain: () => { const f = rateUnitFrames({ ...base, kind: 'per' }); f[0].text += '<br>' + intro; return f; } };
+  if (v === 1) return { html: `密度 ${d} g/cm³ の${m}が ${V} cm³ あります。重さは <b class="box">□</b> g`, text: `${d}g/cm³ × ${V}cm³ → □g`, slots: [slot(M, 'g')],
+    explain: () => { const f = rateUnitFrames({ ...base, kind: 'total' }); f[0].text += '<br>' + intro; return f; } };
+  return { html: `密度 ${d} g/cm³ の${m}のかたまりの重さが ${M.toDec()} g です。体積は <b class="box">□</b> cm³`, text: `${M.toDec()}g ÷ ${d}g/cm³ → □cm³`, slots: [slot(V, 'cm³')],
+    explain: () => { const f = rateUnitFrames({ ...base, kind: 'count' }); f[0].text += '<br>' + intro; return f; } };
+};
+// たて × よこ のマス (cm × cm = cm²)
+function figCmGrid(w, h) {
+  const S = 44, x0 = 150, y0 = 34; let b = '';
+  for (let r = 0; r < h; r++) for (let c = 0; c < w; c++) b += `<rect class="${r === 0 && c === 0 ? 'sh2' : 'sh'}" x="${x0 + c * S}" y="${y0 + r * S}" width="${S}" height="${S}"/>`;
+  b += svgText(x0 + w * S / 2, y0 - 10, `よこ ${w} cm`, 'b') + svgText(x0 - 10, y0 + h * S / 2 + 5, `たて ${h} cm`, 'b', 'end');
+  b += svgText(x0 + w * S + 14, y0 + 18, '← 1 cm × 1 cm = 1 cm²', 'm', 'start') + svgText(x0 + w * S + 14, y0 + 40, `${h} × ${w} = ${h * w} こ → ${h * w} cm²`, 's', 'start');
+  return svgBox(540, y0 + h * S + 12, b, 'cm × cm = cm² の図');
+}
+function unitWhyFrames() {
+  const box = (o) => figPerBox(o);
+  return [
+    { fig: figTapes([{ s: '3 m', segs: [{ w: 1, s: '1 m' }, { w: 1, s: '1 m' }, { w: 1, s: '1 m' }] }, { s: '3 m + 2 m', segs: [{ w: 1, s: '1 m' }, { w: 1, s: '1 m' }, { w: 1, s: '1 m' }, { w: 1, s: '1 m', cls: 'sh3' }, { w: 1, s: '1 m', cls: 'sh3' }], total: '5 m' }], { label: '1 m がいくつ分のテープ図' }),
+      text: '<b>単位は「何が いくつ分」の「何」</b><br>3 m は「1 m が 3つ分」です。数 (3) は いくつ分、単位 (m) は 何の いくつ分か を表しています。<br>3 m + 2 m = 5 m のように、たし算・ひき算は <b>同じ単位どうし</b> でしかできません。3 m + 2 kg は、何の いくつ分かが ちがうので たせません。' },
+    { fig: figCmGrid(4, 3),
+      text: '<b>かけ算では、単位もかけ算になる</b><br>たて 3 cm、よこ 4 cm の長方形の面積は 3 cm × 4 cm。数は 3 × 4 = 12、単位は cm × cm = <b>cm²</b> (平方センチメートル)。<br>cm² は「1 cm × 1 cm のマスが いくつ分」という、かけ算から生まれた単位です。' },
+    { fig: box({ n: 3, each: '80 km', per: '1 時間', total: '全体 240 km', count: '3 時間 ぶん', label: '1時間あたりの箱の図' }) + ueq([['数', '240 ÷ 3 = 80'], ['単位', `${unitHTML('km')}${uop('÷')}${unitHTML('時間')}${uop('=')}${uqHTML(uq('', 'km', '', '時間'))}`], ['あわせて', `${uqHTML(uq(240, 'km'))}${uop('÷')}${uqHTML(uq(3, '時間'))}${uop('=')}${uqHTML(uq(80, 'km', 1, '時間'))}`, 'all']]),
+      text: '<b>わり算では「あたり」の単位ができる</b><br>3 時間で 240 km 走る車。240 km ÷ 3 時間 で、数は 80、単位は km ÷ 時間 = <b>km/時間</b>。<br>km/時間 は「1 時間 あたり 何 km」と読み、これが <b>時速</b> です。分数の形で、上が 全体の量、下が 何あたり かを表しています。' },
+    { fig: box({ n: 4, each: '2.7 g', per: '1 cm³', total: '全体 10.8 g', count: '4 cm³ ぶん', cube: true, label: '1 cm³ あたりの箱の図' }) + ueq([['数', '10.8 ÷ 4 = 2.7'], ['単位', `${unitHTML('g')}${uop('÷')}${unitHTML('cm³')}${uop('=')}${uqHTML(uq('', 'g', '', 'cm³'))}`], ['あわせて', `${uqHTML(uq('10.8', 'g'))}${uop('÷')}${uqHTML(uq(4, 'cm³'))}${uop('=')}${uqHTML(uq('2.7', 'g', 1, 'cm³'))}`, 'all']]),
+      text: '<b>密度も同じ作り方</b><br>体積 4 cm³ で重さ 10.8 g のアルミニウム。重さ ÷ 体積 で、単位は g ÷ cm³ = <b>g/cm³</b>。「1 cm³ (1辺 1 cm の立方体) あたり 何 g」で、これを <b>密度</b> といいます。<br>速さ (km/時間)、人口密度 (人/km²)、ねだん (円/m) も、みんな同じ「全体 ÷ いくつ分」で作られた単位です。' },
+    { fig: ueq([['数', '80 × 3 = 240'], ['単位', `${mulChain([uq('', 'km', '', '時間'), uq('', '時間')])}${uop('=')}${unitHTML('km')}`], ['あわせて', `${mulChain([uq(80, 'km', 1, '時間'), uq(3, '時間')])}${uop('=')}${uqHTML(uq(240, 'km'))}`, 'all']], '下の 時間 と かけた 時間 が消える'),
+      text: '<b>単位は、分数の約分のように消せる</b><br>時速 80 km で 3 時間 走ると？ 80 km/時間 × 3 時間。<br>分数 2/3 × 3 で 3 が約分して消えるのと同じで、<b>時間 が上と下で消えて km がのこります</b>。だから答えは 240 km。' },
+    { fig: figTable(['式', '単位の計算', 'のこる単位', ''], [['80 × 3', 'km/時間 × 時間', 'km', '<b>○ 道のり</b>'], ['80 ÷ 3', 'km/時間 ÷ 時間', 'km/(時間×時間)', '× 意味がない'], ['3 ÷ 80', '時間 ÷ km/時間', '時間×時間/km', '× 意味がない']]),
+      text: '<b>単位で、式が正しいか たしかめられる</b><br>道のり (km) を求めたいとき、80 と 3 をどう計算するか まよったら、単位も計算してみます。<br>km がのこるのは × だけ。ほかの式は「時間×時間」のような お話に出てこない単位になるので、まちがいだと分かります。' },
+    { fig: ueq([['かんさんの もと', `1 km = 1000 m なので ${uqHTML(uq(1000, 'm', 1, 'km'))}${uop('=')}1`], ['単位の式', `${mulChain([uq(3, 'km'), uq(1000, 'm', 1, 'km')])}${uop('=')}${uqHTML(uq(3000, 'm'))}`, 'all'], ['速さも', `${mulChain([uq(72, 'km', 1, '時間'), uq(1000, 'm', 1, 'km'), uq(1, '時間', 60, '分')])}${uop('=')}${uqHTML(uq(1200, 'm', 1, '分'))}`, 'all']], '「1」と同じ分数をかけて 単位を入れかえる'),
+      text: '<b>単位のかんさんも、単位の式でできる</b><br>1 km = 1000 m なので、分数 1000 m/1 km は「1」と同じ大きさ。1 をかけても量は変わらないので、3 km × 1000 m/1 km = 3000 m。km が消えて m がのこります。<br>時速 72 km を分速にするときも、km と 時間 が消えるように分数をならべると、72 × 1000 ÷ 60 = 1200 で <b>分速 1200 m</b>。' },
+    { fig: figTable(['', '全体の量', '÷ いくつ分', '= 1あたり (単位)'], [['速さ', '道のり km', '時間', 'km/時間'], ['密度', '重さ g', '体積 cm³', 'g/cm³'], ['人口密度', '人数 人', '面積 km²', '人/km²'], ['ねだん', '代金 円', '長さ m', '円/m'], ['ねんぴ', '道のり km', 'ガソリン L', 'km/L']]),
+      text: '<b>まとめ</b><br>・単位は「何の いくつ分」。数と いっしょに計算する。<br>・÷ で「○/△ (1△ あたり○)」の単位ができる。× で 上と下の同じ単位が消える。<br>・答えの単位が ほしい単位になっていれば、式が正しい。<br>数だけでなく単位も計算すると、何を求めているのかを見失いません。' },
+  ];
+}
+
 function figTapes(rows, o = {}) {
   const W = 540, x0 = 104, TW = 400;
   const max = o.max || Math.max(...rows.map((r) => r.segs.reduce((a, s) => a + s.w, 0)));
@@ -1496,10 +1697,14 @@ function orderWhyFrames() {
       text: '<b>まとめ</b><br>× ÷ は「同じ数のまとまり」を作ったり分けたりして、1つの数を作る計算。+ − は、できた数どうしを あわせたり とったりする計算。<br>だから、<b>まず まとまり (× ÷) を作り、それから あわせる・とる (+ −)</b>。かっこは、自分で「ここを先に」と決めた まとまりです。<br>この順番は、式の意味 (お話) を 1つに決めるための、みんなの約束です。' },
   ];
 }
-const LESSONS = { order: { title: '計算の順番のわけ', frames: orderWhyFrames } };
+const LESSONS = {
+  order: { title: '計算の順番のわけ', frames: orderWhyFrames, stage: 'A4', btn: 'なぜこの順番？ くわしく見る' },
+  unit: { title: '単位も計算する', frames: unitWhyFrames, stage: 'B5', btn: '単位の計算を くわしく見る' },
+};
 
 function makeProblem(type, level) {
   const p = GEN[type](level);
+  if (p.units) { const ex = p.explain, uf = p.units; p.explain = () => [...ex(), ...uf()]; }
   p.type = type; p.stage = stageOfType(type); p.level = STAGES[p.stage].levels ? level : null;
   p.answerText = p.choices ? (p.choices.find((c) => c.id === p.answerChoice).text || p.choices.find((c) => c.id === p.answerChoice).html)
     : p.slots.map((s) => `${ansText(s.value, s.prefer)}${s.unit ? ' ' + s.unit : ''}`).join(' ');

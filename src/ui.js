@@ -227,7 +227,7 @@ function homeHTML() {
         acts = `<button class="btn btn-sub" data-act="start" data-v="${s}">1→5 で10問</button>${bestText(s) ? `<span class="best">いちばんよい点 ${bestText(s)}</span>` : ''}`;
       } else {
         body = `<div class="sub">${[...new Set(St.types)].map((x) => TYPE_NAMES[x]).join('・')}</div>`;
-        acts = `<button class="btn btn-sub" data-act="start" data-v="${s}">これをやる</button>${s === 'A4' ? '<button class="btn btn-line" data-act="lesson" data-v="order">計算の順番のわけ (読みもの)</button>' : ''}${bestText(s) ? `<span class="best">いちばんよい点 ${bestText(s)}</span>` : ''}`;
+        acts = `<button class="btn btn-sub" data-act="start" data-v="${s}">これをやる</button>${Object.entries(LESSONS).filter(([, L]) => L.stage === s).map(([id, L]) => `<button class="btn btn-line" data-act="lesson" data-v="${id}">${L.title} (読みもの)</button>`).join('')}${bestText(s) ? `<span class="best">いちばんよい点 ${bestText(s)}</span>` : ''}`;
       }
       h += `<div class="stage"><span class="code">${s}</span><div><div class="nm">${St.name}</div>${body}</div><div class="stage-acts">${acts}</div></div>`;
     });
@@ -301,7 +301,7 @@ function practiceHTML() {
     right += '<div class="explain"><p class="ex-empty">答えたあとに、考え方を1つずつ見られます。</p></div>';
   } else {
     const fs = frames(); const f = fs[sess.frame];
-    right += `<div class="explain"><div class="ex-nav"><button class="btn btn-line" data-act="fprev" ${sess.frame === 0 ? 'disabled' : ''}>まえ</button><button class="btn btn-sub" data-act="fnext" ${sess.frame >= fs.length - 1 ? 'disabled' : ''}>つぎ</button><span class="count">${sess.frame + 1} / ${fs.length}</span></div>${f.fig ? `<div class="fig ex-scroll">${f.fig}</div>` : ''}${f.grid ? `<div class="ex-scroll">${gridHTML(f.grid, { div: f.div })}</div>` : ''}<div class="ex-step">${f.text}</div>${f.lesson ? `<div class="fb-actions"><button class="btn btn-sub" data-act="lesson" data-v="${f.lesson}">なぜこの順番？ くわしく見る</button></div>` : ''}</div>`;
+    right += `<div class="explain"><div class="ex-nav"><button class="btn btn-line" data-act="fprev" ${sess.frame === 0 ? 'disabled' : ''}>まえ</button><button class="btn btn-sub" data-act="fnext" ${sess.frame >= fs.length - 1 ? 'disabled' : ''}>つぎ</button><span class="count">${sess.frame + 1} / ${fs.length}</span></div>${f.fig ? `<div class="fig ex-scroll">${f.fig}</div>` : ''}${f.grid ? `<div class="ex-scroll">${gridHTML(f.grid, { div: f.div })}</div>` : ''}<div class="ex-step">${f.text}</div>${f.lesson ? `<div class="fb-actions"><button class="btn btn-sub" data-act="lesson" data-v="${f.lesson}">${LESSONS[f.lesson].btn}</button></div>` : ''}</div>`;
   }
   right += '</aside>';
   return `<div class="practice"><div class="col">${left}</div>${right}</div>`;
