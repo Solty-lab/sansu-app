@@ -624,6 +624,182 @@ function carryNote(p, sv) {
   const split = rest.eq(0) ? '' : ` は ${up.toDec()} と ${rest.toDec()}。${up.toDec()}`;
   return `色のついた位は、数字をたすと 10 以上になります。${PLACE_NAMES[p]}の ${sv.toDec()}${split} は${PLACE_NAMES[p + 1]}の「1」なので、${PLACE_NAMES[p + 1]}に 1 くり上がります。`;
 }
+// ===== 計算のしくみ (意味から説明する) =====
+// 数は「1・10・100・0.1 などが何こあるか」でできている。たし算・ひき算・かけ算・わり算は、
+// このこ数を あわせる・とる・何こ分にする・同じ数ずつ分ける こと。10こ そろうと1つ上の位の1こになる。
+function digitsMap(S) { const m = {}; placeParts(String(S)).forEach((x) => { m[x.p] = x.d; }); return m; }
+function placeList(strs) {
+  let hi = 0, lo = 0;
+  strs.forEach((S) => placeParts(String(S)).forEach((x) => { if (x.d || x.p <= 0) { hi = Math.max(hi, x.p); lo = Math.min(lo, x.p); } }));
+  const out = []; for (let p = hi; p >= lo; p--) out.push(p); return out;
+}
+const unitOf = (p) => partVal(1, p);
+function descCounts(ps, M) { const xs = ps.filter((p) => M[p]).map((p) => `${unitOf(p)} が ${M[p]}こ`); return xs.length ? xs.join('、') : '0'; }
+// 位のタイル図。rows: [{ s, n: {位: こ数}, bars, hl: {位: 先頭から強調するこ数}, gone: {位: 末尾から消すこ数}, note: {位: 文} }]
+// bars が true なら 10こ を「10こ のまとまり (棒)」でかく
+function figTokens(ps, rows) {
+  const W = 540, x0 = 108; const cw = Math.min(140, (W - x0 - 6) / ps.length);
+  const per = Math.max(3, Math.floor((cw - 10) / 23));
+  let y = 34; let b = '';
+  ps.forEach((p, i) => { b += svgText(x0 + i * cw + cw / 2, 20, PLACE_NAMES[p], 's'); if (i) b += `<line class="dash" x1="${r1(x0 + i * cw)}" y1="26" x2="${r1(x0 + i * cw)}" y2="__H__"/>`; });
+  rows.forEach((r) => {
+    const cnt = (p) => r.n[p] || 0;
+    const barsOf = (p) => (r.bars && cnt(p) >= 10 ? Math.floor(cnt(p) / 10) : 0);
+    const hOf = (p) => barsOf(p) * 20 + Math.ceil((cnt(p) - barsOf(p) * 10) / per) * 23 + (r.note && r.note[p] ? 18 : 0);
+    const H = Math.max(30, ...ps.map(hOf)) + 12;
+    b += `<line class="ln2" x1="6" y1="${y - 6}" x2="${W - 6}" y2="${y - 6}"/>` + svgText(x0 - 10, y + 18, r.s, r.lcls || 'b', 'end');
+    ps.forEach((p, i) => {
+      const n = cnt(p); const cx = x0 + i * cw + 6; const bars = barsOf(p); const bw = Math.min(cw - 12, per * 23 - 2);
+      let yy = y;
+      for (let k = 0; k < bars; k++) { b += `<rect class="bundle" x="${r1(cx)}" y="${yy}" width="${r1(bw)}" height="16" rx="8"/>` + svgText(cx + bw / 2, yy + 12, `${unitOf(p)} が10こ`, 'tt'); yy += 20; }
+      for (let k = 0; k < n - bars * 10; k++) {
+        const idx = bars * 10 + k; const tx = cx + (k % per) * 23 + 10, ty = yy + Math.floor(k / per) * 23 + 10;
+        const gone = r.gone && idx >= n - (r.gone[p] || 0); const hl = r.hl && idx < (r.hl[p] || 0);
+        b += `<circle class="${gone ? 'tkg' : hl ? 'tk2' : 'tk'}" cx="${r1(tx)}" cy="${r1(ty)}" r="10"/>` + svgText(tx, ty + 3.5, unitOf(p), 'tt');
+        if (gone) b += `<line class="ac" x1="${r1(tx - 9)}" y1="${r1(ty + 9)}" x2="${r1(tx + 9)}" y2="${r1(ty - 9)}"/>`;
+      }
+      if (!n) b += svgText(cx + 2, y + 18, '0こ', 's', 'start');
+      if (r.note && r.note[p]) b += svgText(x0 + i * cw + cw / 2, y + H - 10, r.note[p], 'm');
+    });
+    y += H;
+  });
+  b = b.replace(/__H__/g, String(y - 6));
+  return svgBox(W, y, b, '位のタイル図 (1・10・0.1 などの こ数)');
+}
+// 同じ数のまとまりが いくつ分 (テープ図)。n こ分。n が大きいときは 位ごとのかたまりでかく
+function figGroups(aS, nS, unitWord = 'こ分') {
+  const n = Fr.dec(nS); const W = 540, x0 = 20, TW = 500; let b = '';
+  let segs;
+  if (n.isInt() && n.n <= 10) segs = Array.from({ length: n.n }, () => ({ w: 1, s: aS }));
+  else if (n.isInt()) segs = partsStr(nS).map((p) => ({ w: +p, s: `${aS} が ${p}${unitWord}` }));
+  else segs = [{ w: 1, s: aS }, { w: n.val() - 1 > 0 ? n.val() - 1 : 0, s: '' }];
+  const tot = segs.reduce((a, s) => a + s.w, 0) || 1;
+  // 細すぎるかたまりは 字が読めるはばにする (図は目安)
+  let ws = segs.map((s) => (s.w ? Math.max(s.w / tot, s.s.length > 6 ? 0.3 : 0) : 0)); const ws2 = ws.reduce((a, b) => a + b, 0) || 1; ws = ws.map((w) => w / ws2);
+  let x = x0;
+  segs.forEach((s, i) => { const w = TW * ws[i]; if (w > 0) b += `<rect class="${i % 2 ? 'sh3' : 'sh'}" x="${r1(x)}" y="20" width="${r1(w)}" height="34"/>` + svgText(x + w / 2, 42, s.s, 'b'); x += w; });
+  b += `<path class="ln" d="M${x0} 62 q0 8 8 8 L${x0 + TW / 2 - 8} 70 q8 0 8 8 q0 -8 8 -8 L${x0 + TW - 8} 70 q8 0 8 -8"/>` + svgText(x0 + TW / 2, 96, `${aS} が ${nS} ${unitWord}`, 'm');
+  return svgBox(W, 104, b, 'まとまりの図');
+}
+// 0.1 × 0.1 = 0.01 を、1 の正方形を 10×10 に分けて示す
+function figUnitGrid() {
+  const S = 200, x0 = 170, y0 = 26; let b = '';
+  for (let r = 0; r < 10; r++) for (let c = 0; c < 10; c++) b += `<rect class="${r === 0 && c === 0 ? 'both' : r === 0 || c === 0 ? 'sh' : 'bx'}" x="${x0 + c * S / 10}" y="${y0 + r * S / 10}" width="${S / 10}" height="${S / 10}"/>`;
+  b += `<rect class="frame" x="${x0}" y="${y0}" width="${S}" height="${S}"/>` + svgText(x0 + S / 2, y0 - 8, 'よこ 1', 's') + svgText(x0 - 8, y0 + S / 2, 'たて 1', 's', 'end');
+  b += svgText(x0 + S + 14, y0 + 14, '← こい1マス = 0.1 × 0.1 = 0.01', 'm', 'start');
+  return svgBox(560, y0 + S + 10, b, '0.1 × 0.1 = 0.01 の図');
+}
+// 位ごとのこ数から、10こ の取りかえ (くり上がり) を下の位から順に行う
+function carryChain(ps, counts) {
+  const asc = ps.slice().reverse(); const fin = {}; const recv = {}; let c = 0; const ev = [];
+  asc.forEach((p) => { const s = (counts[p] || 0) + c; if (c) recv[p] = c; fin[p] = s % 10; if (s >= 10) ev.push({ p, s, c, up: Math.floor(s / 10) }); c = Math.floor(s / 10); });
+  return { fin, recv, ev };
+}
+function carryText(ev) {
+  if (!ev.length) return 'どの位も 9こ以下 なので、取りかえはいりません。';
+  return ev.map((e) => `${PLACE_NAMES[e.p]}は ${e.c ? `${e.s - e.c}こ に、下の位から来た ${e.c}こ を入れて ` : ''}${e.s}こ。${unitOf(e.p)} が 10こ で ${unitOf(e.p + 1)} が 1こ と同じ大きさなので、${e.up > 1 ? `10こ ずつ ${e.up}つ を` : '10こ を'} ${PLACE_NAMES[e.p + 1]}の ${e.up}こ に取りかえます。`).join('<br>') + '<br><small>これが「くり上がり」です。</small>';
+}
+function conceptAddFrames(aS, bS) {
+  const total = Fr.dec(aS).add(Fr.dec(bS)).toDec();
+  const ps = placeList([aS, bS, total]); const A = digitsMap(aS), B = digitsMap(bS);
+  const sum = {}; ps.forEach((p) => { sum[p] = (A[p] || 0) + (B[p] || 0); });
+  const { fin, recv, ev } = carryChain(ps, sum);
+  const note = {}; ev.forEach((e) => { if (sum[e.p] >= 10) note[e.p] = '10こ→上の位へ'; });
+  return [
+    { fig: figTokens(ps, [{ s: aS, n: A }, { s: `+ ${bS}`, n: B }]), text: `たし算は、同じ大きさのものどうしを あわせて数えることです。数は「${ps.map(unitOf).join('・')}」が それぞれ何こあるかで できています。<br>${aS} は ${descCounts(ps, A)}。<br>${bS} は ${descCounts(ps, B)}。` },
+    { fig: figTokens(ps, [{ s: aS, n: A }, { s: `+ ${bS}`, n: B }, { s: 'あわせて', n: sum, bars: true, note }]), text: `同じ位どうし、こ数をあわせます (ちがう位どうしは あわせられません)。<br>${ps.filter((p) => sum[p]).map((p) => `${unitOf(p)}: ${A[p] || 0} + ${B[p] || 0} = ${sum[p]}こ`).join('<br>')}` },
+    { fig: figTokens(ps, [{ s: 'あわせて', n: sum, bars: true, note }, { s: '取りかえた後', n: fin, hl: recv, lcls: 'm' }]), text: `${carryText(ev)}<br>どの位も 9こ以下 になったら、こ数がそのまま答えの数字です: <b>${total}</b>` },
+  ];
+}
+function conceptSubFrames(aS, bS) {
+  const res = Fr.dec(aS).sub(Fr.dec(bS)).toDec();
+  const ps = placeList([aS, bS]); const A = digitsMap(aS), B = digitsMap(bS);
+  const work = {}; ps.forEach((p) => { work[p] = A[p] || 0; }); const hl = {}; const lines = [];
+  ps.slice().reverse().forEach((p) => {
+    if (work[p] >= (B[p] || 0)) return;
+    let q = p + 1; while (!work[q]) q++;
+    lines.push(`${PLACE_NAMES[p]}は ${work[p]}こ から ${B[p]}こ とれません。${q > p + 1 ? `${ps.filter((x) => x > p && x < q).map((x) => PLACE_NAMES[x]).join('・')}も 0こ なので、` : ''}${PLACE_NAMES[q]}の ${unitOf(q)} を 1こ くずして${q > p + 1 ? '、順に' : ''} ${unitOf(p)} を 10こ にします。`);
+    for (let r = q; r > p; r--) { work[r] -= 1; work[r - 1] += 10; hl[r - 1] = 10; }
+  });
+  const fin = {}; ps.forEach((p) => { fin[p] = work[p] - (B[p] || 0); });
+  const fs = [{ fig: figTokens(ps, [{ s: aS, n: A }, { s: `− ${bS}`, n: B }]), text: `ひき算は、同じ大きさのものどうし、ひく数の こ数だけ とりのぞくことです。<br>${aS} は ${descCounts(ps, A)}。<br>とりのぞくのは ${descCounts(ps, B)}。` }];
+  if (lines.length) fs.push({ fig: figTokens(ps, [{ s: aS, n: A }, { s: 'くずした後', n: work, hl, lcls: 'm' }]), text: `${lines.join('<br>')}<br><small>${unitOf(ps[0])} を くずしても、全体の大きさは同じ ${aS} です。これが「くり下がり」です。</small>` });
+  fs.push({ fig: figTokens(ps, [{ s: lines.length ? 'くずした後' : aS, n: work, hl, gone: B }, { s: 'のこり', n: fin, lcls: 'm' }]), text: `同じ位どうし、ひく数の こ数だけ とりのぞきます (×の つぶ)。<br>${ps.filter((p) => work[p]).map((p) => `${unitOf(p)}: ${work[p]} − ${B[p] || 0} = ${fin[p]}こ`).join('<br>')}<br>のこりの こ数を読むと <b>${res}</b>` });
+  return fs;
+}
+function conceptMulFrames(aS, bS) {
+  const A = splitDec(aS), B = splitDec(bS); const res = Fr.dec(aS).mul(Fr.dec(bS)).toDec();
+  const fs = [];
+  if (!B.places && B.digits.length === 1) {
+    const b = +bS; const ps = placeList([aS, res]); const Am = digitsMap(aS);
+    const prod = {}; ps.forEach((p) => { prod[p] = (Am[p] || 0) * b; });
+    const { fin, recv, ev } = carryChain(ps, prod);
+    fs.push({ fig: figGroups(aS, bS), text: `かけ算は、同じ数のまとまりが いくつ分あるかを表します。${aS} × ${b} は「${aS} が ${b}こ分」で、${aS} を ${b}回 たすのと同じです。<br>${Array(b).fill(aS).join(' + ')}` });
+    fs.push({ fig: figTokens(ps, [{ s: aS, n: Am }, { s: `${b}こ分`, n: prod, bars: true }]), text: `${aS} は ${descCounts(ps, Am)}。${b}こ分 にすると、どの位の こ数も ${b}倍 になります。<br>${ps.filter((p) => Am[p]).map((p) => `${unitOf(p)}: ${Am[p]}こ × ${b} = ${prod[p]}こ`).join('<br>')}` });
+    fs.push({ fig: figTokens(ps, [{ s: `${b}こ分`, n: prod, bars: true }, { s: '取りかえた後', n: fin, hl: recv, lcls: 'm' }]), text: `${carryText(ev)}<br>答え: <b>${res}</b>` });
+    return fs;
+  }
+  if (!B.places && !A.places) {
+    const parts = partsStr(bS); const ps = placeList([aS, String(+aS * 10)]); const Am = digitsMap(aS), Tm = digitsMap(String(+aS * 10));
+    fs.push({ fig: figGroups(aS, bS), text: `かけ算は、同じ数のまとまりが いくつ分あるかを表します。${aS} × ${bS} は「${aS} が ${bS}こ分」。${bS}こ分 を ${parts.map((p) => `${p}こ分`).join(' と ')} に分けると 計算しやすくなります。` });
+    fs.push({ fig: figTokens(ps, [{ s: aS, n: Am }, { s: '10こ分', n: Tm, lcls: 'm' }]), text: `${aS} が 10こ分 では、どのつぶも 10こ ずつになり、10こ は1つ上の位の 1こ なので、全部が1つ上の位に うつります。<br>${aS} × 10 = ${+aS * 10} (0 が1つつく)。${parts.length > 1 ? `だから ${aS} × ${parts[0]} = ${aS} × ${+parts[0] / 10} × 10 = <b>${+aS * +parts[0]}</b>。` : ''}<br><small>筆算で2段目を1つ左にずらして書くのは、このためです。</small>` });
+    return fs;
+  }
+  // かける数が小数
+  const bv = Fr.dec(bS).val();
+  fs.push({ fig: figDoubleLine({ top: '大きさ', bot: '倍', cols: [{ pos: 0, t: '0', b: '0' }, { pos: 1, t: aS, b: '1' }, { pos: bv, t: res, b: bS, ut: true }], arrows: [{ from: 1, to: bv, s: `×${bS}`, side: 'bot' }], label: '二本の数直線' }),
+    text: `かける数が小数のときも、かけ算は「${aS} を 1 とみたとき、${bS} にあたる大きさ」です。${bv < 1 ? `${bS} は 1 より小さいので、答えは ${aS} より小さくなります。` : `${bS} は 1 より大きいので、答えは ${aS} より大きくなります。`}` });
+  if (A.places && B.places) fs.push({ fig: figUnitGrid(), text: '小数どうしのかけ算は、1 の正方形を 10等分・100等分した 小さいマスで考えます。0.1 × 0.1 は、1 の正方形を たて・よこ 10等分した 1マス分で 0.01 です。<br><small>だから 小数第1位 × 小数第1位 の答えは、小数第2位まで になります。</small>' });
+  return fs;
+}
+function conceptDivFrames(aS, bS) {
+  const B = splitDec(bS); const D = Fr.dec(aS).mul(10 ** B.places), d = +B.digits;
+  const Ds = D.toDec(), Q = D.div(d).toDec();
+  if (!B.places && B.digits.length === 1) {
+    const ps = placeList([Ds, Q]); const Dm = digitsMap(Ds), Qm = digitsMap(Q);
+    const lines = []; let c = 0;
+    ps.forEach((p) => {
+      const n = (Dm[p] || 0) + c * 10; const q = Math.floor(n / d), r = n - q * d;
+      if (n) lines.push(`${PLACE_NAMES[p]}: ${unitOf(p)} が ${n}こ。${d}つに分けると 1つ分は ${q}こ${r ? `、${r}こ あまる → ${unitOf(p - 1)} を ${r * 10}こ に くずして 下の位へ` : ''}`);
+      c = r;
+    });
+    return [
+      { fig: figTokens(ps, [{ s: Ds, n: Dm }]), text: `わり算は、同じ数ずつ分けることです。${Ds} ÷ ${d} は「${Ds} を ${d}つに 同じ数ずつ分けた 1つ分」です。<br>${Ds} は ${descCounts(ps, Dm)}。上の位から 分けていきます。` },
+      { fig: figTokens(ps, [{ s: Ds, n: Dm }, { s: '1つ分', n: Qm, lcls: 'm' }]), text: `${lines.join('<br>')}<br>1つ分 を読むと <b>${Q}</b>。<br><small>あまった つぶを くずして下の位へ送るのが、筆算の「おろす」です。</small>` },
+    ];
+  }
+  return [{ fig: figDoubleLine({ top: '大きさ', bot: 'いくつ分', cols: [{ pos: 0, t: '0', b: '0' }, { pos: 1, t: String(d), b: '1' }, { pos: +Q, t: Ds, b: Q, ub: true }], label: '二本の数直線' }),
+    text: `わり算は「${Ds} の中に ${d} が いくつ分あるか」とも考えられます。${d} の □こ分 が ${Ds} になる □ を求めます。` }];
+}
+// まぜた計算: 式を言葉にして、× ÷ が「ひとまとまりの数」であることを示す
+function meaningOf(n, top) {
+  if (n.leaf) return numText(n.tok);
+  const L = meaningOf(n.l), R = meaningOf(n.r);
+  const s = n.op === '+' ? `${L} と ${R} を あわせた数` : n.op === '-' ? `${L} から ${R} を とった数` : n.op === '*' ? `${L} の ${R}倍` : `${L} を ${R} で わった数`;
+  return top ? s : `「${s}」`;
+}
+// まちがえて「左から順に」計算したときの値 (かっこは守る)
+function naiveEval(tokens) {
+  let i = 0;
+  const seq = () => {
+    let v = null, op = null;
+    while (i < tokens.length && tokens[i].k !== ')') {
+      const t = tokens[i++];
+      if (t.k === 'op') { op = t.v; continue; }
+      const x = t.k === '(' ? (() => { const r = seq(); i++; return r; })() : t.v;
+      v = v === null ? x : applyOp(op, v, x);
+    }
+    return v;
+  };
+  return seq();
+}
+function groupHTML(n, inSum) {
+  if (n.leaf) return numHTML(n.tok);
+  const inner = `${groupHTML(n.l, n.op === '+' || n.op === '-')} ${OPS[n.op]} ${groupHTML(n.r, n.op === '+' || n.op === '-')}`;
+  const s = n.paren ? `(${inner})` : inner;
+  return (inSum && (n.op === '*' || n.op === '/')) || n.paren ? `<span class="grp">${s}</span>` : s;
+}
+
 function niceMax(v) { const st = niceStep(v || 1, 5); return Math.ceil(v / st - 1e-9) * st; }
 // start から parts を順に たす/ひく ようすを数直線に
 function jumpLine(start, parts, sign, label) {
@@ -736,8 +912,8 @@ function decStr(intDigitsMax, places) {
 const GEN = {};
 const noZeroInt = (lo, hi) => { let v; do { v = ri(lo, hi); } while (/0/.test(String(v))); return v; };
 const digitsOf = (n) => String(n).split('').map(Number);
-function addProblem(a, b) { const v = Fr.dec(a).add(Fr.dec(b)); return { html: `${a} + ${b} =`, text: `${a} + ${b}`, slots: [slot(v)], explain: () => withHissan(pvAddFrames(a, b), addSubFrames(a, b, '+')) }; }
-function subProblem(a, b) { const v = Fr.dec(a).sub(Fr.dec(b)); return { html: `${a} − ${b} =`, text: `${a} − ${b}`, slots: [slot(v)], explain: () => withHissan(pvSubFrames(a, b), addSubFrames(a, b, '-')) }; }
+function addProblem(a, b) { const v = Fr.dec(a).add(Fr.dec(b)); return { html: `${a} + ${b} =`, text: `${a} + ${b}`, slots: [slot(v)], explain: () => withHissan(conceptAddFrames(a, b).concat(pvAddFrames(a, b)), addSubFrames(a, b, '+')) }; }
+function subProblem(a, b) { const v = Fr.dec(a).sub(Fr.dec(b)); return { html: `${a} − ${b} =`, text: `${a} − ${b}`, slots: [slot(v)], explain: () => withHissan(conceptSubFrames(a, b).concat(pvSubFrames(a, b)), addSubFrames(a, b, '-')) }; }
 GEN.int_add = (lv = 1) => {
   for (;;) {
     if (lv <= 1) { const a = ri(11, 88), b = ri(11, 88); const da = digitsOf(a), db = digitsOf(b); if (da[0] + db[0] <= 9 && da[1] + db[1] <= 9) return addProblem(String(a), String(b)); }
@@ -750,8 +926,8 @@ GEN.int_sub = (lv = 1) => {
     else { const a = ri(201, 999), b = ri(102, a - 50); const da = digitsOf(a), db = digitsOf(b); if (db.length === 3 && (da[2] < db[2] || da[1] < db[1])) return subProblem(String(a), String(b)); }
   }
 };
-function mulProblem(a, b) { const v = Fr.dec(a).mul(Fr.dec(b)); return { html: `${a} × ${b} =`, text: `${a} × ${b}`, slots: [slot(v)], explain: () => withHissan(pvMulFrames(a, b), mulFrames(a, b)) }; }
-function divProblem(a, b, q) { return { html: `${a} ÷ ${b} =`, text: `${a} ÷ ${b}`, slots: [slot(q)], explain: () => withHissan(pvDivFrames(a, b), divFrames(a, b)) }; }
+function mulProblem(a, b) { const v = Fr.dec(a).mul(Fr.dec(b)); return { html: `${a} × ${b} =`, text: `${a} × ${b}`, slots: [slot(v)], explain: () => withHissan(conceptMulFrames(a, b).concat(pvMulFrames(a, b)), mulFrames(a, b)) }; }
+function divProblem(a, b, q) { return { html: `${a} ÷ ${b} =`, text: `${a} ÷ ${b}`, slots: [slot(q)], explain: () => withHissan(conceptDivFrames(a, b).concat(pvDivFrames(a, b)), divFrames(a, b)) }; }
 GEN.int_mul = (lv = 3) => {
   if (lv <= 3) return mulProblem(String(ri(12, 98)), String(ri(3, 9)));
   if (lv === 4) return mulProblem(String(ri(12, 98)), String(noZeroInt(12, 59)));
@@ -987,6 +1163,10 @@ function exprSteps(tokens) {
     if (n.op === '*' || n.op === '/') return 'かけ算・わり算を、たし算・ひき算より先に計算します';
     return '左から順に計算します';
   };
+  const right = evalTree(tree); const naive = naiveEval(tokens);
+  const hasParen = tokens.some((t) => t.k === '(');
+  const warn = right.eq(naive) ? '' : `<br><small>もし 左から順に計算すると ${naive.n < 0 ? '途中で ひけなくなってしまいます' : `${fv(naive)} になり、正しい答え ${fv(right)} と ちがってしまいます`}。式の意味が変わってしまうからです。</small>`;
+  frames.push({ fig: `<div class="expr grpd">${groupHTML(tree, true)}</div>`, text: `式を言葉にすると、${meaningOf(tree, true)} です。<br>「〜の〜倍」「〜を〜でわった数」は、それだけで 1つの数 (まとまり) を表しています (□で かこんだ所)。たしたり ひいたりする相手は、この まとまりの数 なので、まとまりの数を先に出します。${hasParen ? '<br>かっこは「この中を先に 1つの数にまとめる」という しるしです。' : ''}${warn}` });
   frames.push({ fig: figTree(tree, firstReducible(tree), numText), text: `計算の順番: ① かっこの中 → ② かけ算・わり算 → ③ たし算・ひき算 (同じなかまは左から)。<br><small>図は「式の木」です。上の数を 下の ○ の計算で まとめていきます。黄色の ○ が次の計算です。</small><div class="expr">${tokensHTML(nodeTokens(tree))}</div>` });
   for (let guard = 0; guard < 8 && !tree.leaf; guard++) {
     const n = firstReducible(tree);
