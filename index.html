@@ -163,6 +163,24 @@ table.mx td, table.mx th { text-align: center; }
 .ueq .op { margin: 0 4px; }
 .uq .n + .u, .uqf .n + .u { margin-left: 5px; }
 .choices .uqf, .choices .uq { font-size: 1.6rem; }
+.clock { display: flex; gap: 16px; font-size: .9rem; color: var(--ink-2); order: 3; flex-basis: 100%; }
+.clock b { font-variant-numeric: tabular-nums; color: var(--ink); }
+.gain { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: .95rem; margin: 4px 0 2px; }
+.gain span { font-variant-numeric: tabular-nums; }
+.gain .hot, .pill.hot { color: var(--mark); font-weight: 700; }
+.medal { display: inline-grid; place-items: center; width: 1.7em; height: 1.7em; border-radius: 50%; font-size: .75rem; font-weight: 800; margin-right: 4px; color: #fff; vertical-align: middle; }
+.medal.m1 { background: #a8673a; } .medal.m2 { background: #8a949e; } .medal.m3 { background: #c8960c; }
+.medal.big { width: 2.6em; height: 2.6em; font-size: 1.3rem; }
+.medals { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-bottom: 12px; }
+.medals .lb { font-weight: 700; font-size: .9rem; }
+.medals small { flex-basis: 100%; color: var(--ink-2); font-size: .78rem; }
+.timebox { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 10px 0; }
+.timebox > div { border: 1px solid var(--rule); border-radius: var(--r); padding: 10px 14px; display: grid; gap: 2px; }
+.timebox .lb { font-size: .8rem; color: var(--ink-2); font-weight: 700; }
+.timebox b { font-size: 1.3rem; font-variant-numeric: tabular-nums; }
+.timebox small { font-size: .72rem; color: var(--ink-2); }
+.li .tt { font-variant-numeric: tabular-nums; text-align: right; font-size: .9rem; white-space: nowrap; }
+.li .tt small { color: var(--ink-2); }
 .figcap { font-size: .85rem; font-weight: 700; color: var(--ink-2); margin: 6px 0 2px; }
 .expr.grpd { font-size: 1.4rem; padding: 8px 0; }
 .grp { display: inline-block; border: 2px solid var(--mark); border-radius: 8px; padding: 0 6px; margin: 0 2px; }
@@ -253,7 +271,7 @@ table.pv td.carry { background: var(--hl); }
 .score { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
 .score .big { font-family: var(--f-display); font-size: 3.4rem; font-weight: 700; color: var(--board); font-variant-numeric: tabular-nums; }
 .list { background: var(--sheet); border: 1px solid var(--rule); border-radius: var(--r); }
-.li { display: grid; grid-template-columns: 2.4em minmax(0, 1fr) auto; gap: 12px; padding: 12px 16px; border-top: 1px solid var(--rule); align-items: center; }
+.li { display: grid; grid-template-columns: 2.4em minmax(0, 1fr) auto auto; gap: 12px; padding: 12px 16px; border-top: 1px solid var(--rule); align-items: center; }
 .li:first-child { border-top: 0; }
 .li .m { font-family: var(--f-display); font-weight: 700; font-size: 1.3rem; text-align: center; }
 .li .m.ok { color: var(--mark); }
@@ -2030,8 +2048,30 @@ if (typeof module !== 'undefined') module.exports = { Fr, GEN, makeProblem, LESS
 // ===== 保存 =====
 const LS_KEY = 'keisan-tani-v1';
 const SESSION_LEN = 10;
+// ===== 点数・メダル・タイム =====
+// 正解 100点 (しくみを見てから正解 50点)、れんぞく正解・自己ベスト・見直しで少しボーナス
+const PTS = { ok: 100, hint: 50, streak: 10, streakMax: 30, pb: 20, review: 20 };
+const MEDAL = ['', '銅', '銀', '金'];
+const medalHTML = (m) => (m ? `<span class="medal m${m}" title="${MEDAL[m]}メダル">${MEDAL[m]}</span>` : '');
+function fmtSec(ms) { const t = Math.round(ms / 1000); return t < 60 ? `${t}秒` : `${Math.floor(t / 60)}分${String(t % 60).padStart(2, '0')}秒`; }
+function fmtClock(ms) { const t = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; }
+// 10問すべて答えたときのメダル: 金 = しくみを見ずに全問正解、銀 = 9問以上、銅 = 7問以上
+function medalOf(items) {
+  const main = items.filter((x) => !x.extra); if (main.length < SESSION_LEN) return 0;
+  const c = main.filter((x) => x.ok).length;
+  return c === SESSION_LEN && !main.some((x) => x.hint) ? 3 : c >= 9 ? 2 : c >= 7 ? 1 : 0;
+}
+function nextMedalText(items) {
+  const main = items.filter((x) => !x.extra); const c = main.filter((x) => x.ok).length; const m = medalOf(items);
+  if (m === 3) return '金メダル！ 次はタイムを ちぢめてみよう。';
+  if (m === 2) return c === SESSION_LEN ? '金メダルは、しくみを見ずに 10問 正解。' : `あと ${SESSION_LEN - c}問 正解で、金メダルに近づきます (しくみを見ずに 10問 正解)。`;
+  return `あと ${(m === 1 ? 9 : 7) - c}問 正解で ${m === 1 ? '銀' : '銅'}メダル。`;
+}
+// メダルをとれる練習 (ステップ全体と、各レベル)
+function allCourses() { const ks = []; for (const st of Object.keys(STAGES)) { ks.push(st); if (STAGES[st].levels) Object.keys(STAGES[st].levels).forEach((n) => ks.push(`${st}:${n}`)); } return ks; }
+const elapsed = () => (sess.hiddenAt ? sess.hiddenAt : Date.now()) - sess.t0;
 function freshState() {
-  return { v: 2, updatedAt: 0, unlocked: { A1: true, B1: true }, best: {}, mistakes: {}, typeStats: {}, sessions: [] };
+  return { v: 2, updatedAt: 0, unlocked: { A1: true, B1: true }, best: {}, mistakes: {}, typeStats: {}, fastest: {}, sessions: [] };
 }
 // v1 (A1=整数・小数, A2=分数, A3=まぜた計算) → v2 (A1=整数, A2=小数, A3=分数, A4=まぜた計算)
 function migrate(s) {
@@ -2127,9 +2167,9 @@ function planSession(mode, fixedLv) {
 // ===== 練習の状態 =====
 let view = 'home';
 let sess = null; // {id, mode, plan:[{type, extra}], idx, items:[], startedAt, problem, inputs, active, phase, t0, sideTab, frame, hint}
-function startSession(mode, fixedLv) {
+function startSession(mode, fixedLv, plan) {
   fixedLv = fixedLv ? +fixedLv : null;
-  sess = { id: 's' + Date.now().toString(36) + Math.floor(rnd() * 1e4).toString(36), mode, fixedLv, plan: planSession(mode, fixedLv), idx: 0, items: [], startedAt: Date.now() };
+  sess = { id: 's' + Date.now().toString(36) + Math.floor(rnd() * 1e4).toString(36), mode, fixedLv, plan: plan || planSession(mode, fixedLv), idx: 0, items: [], startedAt: Date.now(), score: 0, streak: 0 };
   view = 'practice';
   nextProblem(true);
 }
@@ -2144,7 +2184,7 @@ function nextProblem(first) {
   sess.phase = 'answer'; // answer | done
   sess.result = null;
   sess.t0 = Date.now();
-  sess.hint = false; sess.frame = 0; sess.sideTab = 'memo'; sess.frames = null;
+  sess.hint = false; sess.frame = 0; sess.sideTab = 'memo'; sess.frames = null; sess.reviewed = false; sess.hiddenAt = null;
   sess.msg = null;
   render();
   if (memo) memo.clear();
@@ -2158,7 +2198,15 @@ function showExplain() {
 function recordAnswer(ok, givenText) {
   const p = sess.problem;
   const extra = !!sess.plan[sess.idx].extra;
-  const item = { type: p.type, stage: p.stage, level: p.level, q: p.text, given: givenText, answer: p.answerText, ok, hint: sess.hint, ms: Date.now() - sess.t0, extra };
+  const item = { type: p.type, stage: p.stage, level: p.level, q: p.text, given: givenText, answer: p.answerText, ok, hint: sess.hint, ms: elapsed(), extra };
+  // 点数: 正解 (しくみを見たら半分) + れんぞく正解 + 自己ベスト
+  sess.streak = ok ? sess.streak + 1 : 0;
+  const gain = { base: ok ? (sess.hint ? PTS.hint : PTS.ok) : 0, streak: ok && sess.streak >= 2 ? Math.min(PTS.streakMax, PTS.streak * (sess.streak - 1)) : 0, pb: 0 };
+  if (!state.fastest) state.fastest = {};
+  const fk = missKey(p.type, p.level);
+  if (ok && !sess.hint) { const prev = state.fastest[fk]; if (prev && item.ms < prev) gain.pb = PTS.pb; if (!prev || item.ms < prev) state.fastest[fk] = item.ms; item.prevFast = prev || null; }
+  item.pts = gain.base + gain.streak + gain.pb; item.streak = sess.streak; item.pb = !!gain.pb;
+  sess.score += item.pts; sess.gain = gain;
   sess.items.push(item);
   const ts = state.typeStats[p.type] || (state.typeStats[p.type] = { n: 0, c: 0, hint: 0, review: 0 });
   ts.n++; if (ok) ts.c++; if (sess.hint) ts.hint++;
@@ -2200,23 +2248,30 @@ function oneMore() {
 }
 // 練習の名前と、いちばんよい点を記録するキー
 const sessKey = (mode, lv) => (lv ? `${mode}:${lv}` : mode);
-function sessLabel(mode, lv) { if (mode === 'auto') return 'おまかせ'; return `${mode} ${STAGES[mode] ? STAGES[mode].name : ''}${lv ? ` レベル${lv}` : STAGES[mode] && STAGES[mode].levels ? ' (レベル1→5)' : ''}`; }
+function sessLabel(mode, lv) { if (mode === 'auto') return 'おまかせ'; if (mode === 'retry') return 'まちがえた問題に リベンジ'; return `${mode} ${STAGES[mode] ? STAGES[mode].name : ''}${lv ? ` レベル${lv}` : STAGES[mode] && STAGES[mode].levels ? ' (レベル1→5)' : ''}`; }
 // ステップをえらんだ10問を全部答えたときだけ、いちばんよい点を記録する
 function judgeStage() {
-  if (sess.mode === 'auto') return;
+  sess.records = [];
+  if (sess.mode === 'auto' || sess.mode === 'retry') return;
   const main = sess.items.filter((x) => !x.extra);
   if (main.length < SESSION_LEN) return;
   const c = main.filter((x) => x.ok).length;
   const k = sessKey(sess.mode, sess.fixedLv);
-  const b = state.best[k];
+  const b = state.best[k] || null;
   sess.prevBest = b ? b.c : null;
-  if (!b || c > b.c) state.best[k] = { c, n: SESSION_LEN };
+  const ms = main.reduce((a, x) => a + x.ms, 0), medal = medalOf(sess.items);
+  const nb = Object.assign({ c: 0, n: SESSION_LEN, score: 0, medal: 0 }, b || {});
+  if (!b || c > b.c) nb.c = c;
+  if (!b || sess.score > (b.score || 0)) { if (b && b.score != null) sess.records.push(`点数の記録を更新 (${b.score} → ${sess.score}点)`); nb.score = sess.score; }
+  if (medal > (nb.medal || 0)) { sess.records.push(`${MEDAL[medal]}メダルを とった！`); nb.medal = medal; }
+  if (c === SESSION_LEN) { if (b && b.ms && ms < b.ms) sess.records.push(`全問正解タイムを更新 (${fmtSec(b.ms)} → ${fmtSec(ms)})`); if (!nb.ms || ms < nb.ms) nb.ms = ms; }
+  state.best[k] = nb;
 }
 function finishSession(quit) {
   if (!sess) return;
   if (!quit) judgeStage();
   if (sess.items.length) {
-    const s = { id: sess.id, mode: sess.mode, lv: sess.fixedLv || undefined, startedAt: sess.startedAt, endedAt: Date.now(), n: sess.items.length, c: sess.items.filter((x) => x.ok).length, items: sess.items, quit: !!quit };
+    const s = { id: sess.id, mode: sess.mode, lv: sess.fixedLv || undefined, startedAt: sess.startedAt, endedAt: Date.now(), n: sess.items.length, c: sess.items.filter((x) => x.ok).length, items: sess.items, quit: !!quit, score: sess.score, ms: sess.items.reduce((a, x) => a + x.ms, 0), medal: quit ? 0 : medalOf(sess.items) };
     state.sessions.unshift(s); state.sessions = state.sessions.slice(0, 60);
     state.updatedAt = Date.now();
     saveLocal();
@@ -2241,10 +2296,14 @@ function dotsHTML(arr, total = 10) {
   for (let i = 0; i < total; i++) s += `<i class="${arr[i] === 1 ? 'ok' : arr[i] === 0 ? 'ng' : ''}"></i>`;
   return s + '</span>';
 }
-function bestText(k) { const b = state.best[k]; return b ? `${b.c}/${b.n}` : ''; }
+function bestText(k) { const b = state.best[k]; return b ? `${medalHTML(b.medal)}${b.c}/${b.n}${b.score ? ` ${b.score}点` : ''}${b.ms ? ` ${fmtSec(b.ms)}` : ''}` : ''; }
+function medalSummary() {
+  const ks = allCourses(); const cnt = [0, 0, 0, 0]; ks.forEach((k) => { const b = state.best[k]; cnt[b && b.medal ? b.medal : 0]++; });
+  return `<div class="medals"><span class="lb">メダル (${ks.length}コース)</span>${[3, 2, 1].map((m) => `<span>${medalHTML(m)} ${cnt[m]}</span>`).join('')}<small>金 = しくみを見ずに10問正解、銀 = 9問以上、銅 = 7問以上</small></div>`;
+}
 function homeHTML() {
   const miss = Object.entries(state.mistakes).filter(([, n]) => n > 0).map(([k]) => missLabel(k));
-  let h = `<section class="hero grid-bg"><div><h1>きょうの れんしゅう</h1><p>やりたいところを、すきな順番で えらべます。1回 10問です。</p><p>「1→5」は 1問ごとに少しずつむずかしくなる10問、「レベル○」は そのレベルだけの10問です。わからないときは「しくみを見る」で、図を見ながら考え方を1つずつ見られます。</p>${miss.length ? `<p>前にまちがえた問題も入ります: ${miss.slice(0, 3).join('、')}${miss.length > 3 ? ' ほか' : ''}</p>` : ''}</div><div class="hero-act"><button class="btn btn-main" data-act="start" data-v="auto">おまかせで はじめる</button><span class="sub">ぜんぶのステップから まぜて出します</span></div></section><div class="tracks">`;
+  let h = `<section class="hero grid-bg"><div><h1>きょうの れんしゅう</h1><p>やりたいところを、すきな順番で えらべます。1回 10問です。</p><p>「1→5」は 1問ごとに少しずつむずかしくなる10問、「レベル○」は そのレベルだけの10問です。わからないときは「しくみを見る」で、図を見ながら考え方を1つずつ見られます。</p>${miss.length ? `<p>前にまちがえた問題も入ります: ${miss.slice(0, 3).join('、')}${miss.length > 3 ? ' ほか' : ''}</p>` : ''}</div><div class="hero-act">${medalSummary()}<button class="btn btn-main" data-act="start" data-v="auto">おまかせで はじめる</button><span class="sub">ぜんぶのステップから まぜて出します</span></div></section><div class="tracks">`;
   for (const t of Object.keys(TRACKS)) {
     const T = TRACKS[t];
     h += `<section class="track"><h2>${t}. ${T.name}</h2>`;
@@ -2271,6 +2330,14 @@ function inputHTML(s) {
   if ((m = s.match(/^(\d*)\/(\d*)$/))) return fracHTML(m[1] || '&nbsp;', m[2] || '&nbsp;');
   return esc(s);
 }
+function gainHTML() {
+  const it = sess.items[sess.items.length - 1]; if (!it) return '';
+  const parts = [`<span>${fmtSec(it.ms)}</span>`, `<span>+${it.pts}点</span>`];
+  if (it.streak >= 2) parts.push(`<span class="hot">${it.streak}れんぞく正解 (+${sess.gain.streak})</span>`);
+  if (it.pb) parts.push(`<span class="hot">自己ベスト！ ${fmtSec(it.prevFast)} → ${fmtSec(it.ms)} (+${PTS.pb})</span>`);
+  if (it.review) parts.push(`<span class="hot">見直しボーナス +${PTS.review}</span>`);
+  return `<div class="gain">${parts.join('')}</div>`;
+}
 function practiceHTML() {
   const p = sess.problem;
   const main = sess.plan.filter((x) => !x.extra).length;
@@ -2284,7 +2351,7 @@ function practiceHTML() {
     dots += `<i class="${it ? (it.ok ? 'ok' : 'ng') : ''}${i === sess.idx ? ' now' : ''}"></i>`; k++;
   });
   dots += '</span>';
-  let left = `<div class="pbar">${dots}<span class="count">${isExtra ? 'もう1問 (同じレベル)' : `${doneMain + 1} / ${main} 問目`}</span><button class="btn btn-line" data-act="quit" style="padding:8px 14px;font-size:.9rem">やめる</button></div>`;
+  let left = `<div class="pbar">${dots}<span class="count">${isExtra ? 'もう1問 (同じレベル)' : `${doneMain + 1} / ${main} 問目`}</span><span class="clock" aria-label="時間"><span>この問題 <b id="tmr">${fmtClock(sess.phase === 'answer' ? elapsed() : (sess.items[sess.items.length - 1] || { ms: 0 }).ms)}</b></span><span>合計 <b id="tmr-all">${fmtClock(sess.items.reduce((a, x) => a + x.ms, 0) + (sess.phase === 'answer' ? elapsed() : 0))}</b></span><span>点数 <b>${sess.score}</b></span></span><button class="btn btn-line" data-act="quit" style="padding:8px 14px;font-size:.9rem">やめる</button></div>`;
   if (sess.idx === 0 && p.level) left += `<p class="pnote">${sess.fixedLv ? `レベル${sess.fixedLv} の問題を 10問 やります。` : '1問ごとに少しずつ むずかしくなります (レベル1 → 5)。'}</p>`;
   const lvInfo = p.level ? STAGES[p.stage].levels[p.level] : null;
   left += `<div class="qcard"><div class="qmeta"><span class="code">${p.stage}</span>${p.level ? `<span class="lvchip">レベル ${p.level} / 5</span>` : ''}<span>${TYPE_NAMES[p.type]}</span>${lvInfo ? `<span class="lvname">${lvInfo.name}</span>` : ''}</div>`;
@@ -2307,9 +2374,9 @@ function practiceHTML() {
     const last = sess.idx >= sess.plan.length - 1;
     const nextLabel = last ? '結果を見る' : 'つぎへ';
     if (sess.result) {
-      left += `<div class="feedback ok" role="status"><div class="fb-title">せいかい！</div>${sess.hint ? '<div class="note">しくみを見てから答えました。次は見ないでできるかな。</div>' : ''}<div class="fb-actions"><button class="btn btn-main" data-act="next">${nextLabel}</button>${sess.sideTab !== 'explain' ? '<button class="btn btn-sub" data-act="explain">しくみを見る</button>' : ''}</div></div>`;
+      left += `<div class="feedback ok" role="status"><div class="fb-title">せいかい！</div>${gainHTML()}${sess.hint ? '<div class="note">しくみを見てから答えました (50点)。次は見ないでできるかな。</div>' : ''}<div class="fb-actions"><button class="btn btn-main" data-act="next">${nextLabel}</button>${sess.sideTab !== 'explain' ? '<button class="btn btn-sub" data-act="explain">しくみを見る</button>' : ''}</div></div>`;
     } else {
-      left += `<div class="feedback ng" role="status"><div class="fb-title">おしい。答えは</div><div class="fb-ans">${p.answerHTML}</div><div class="note">右の「しくみ」で、考え方を1つずつ見てみよう。</div><div class="fb-actions"><button class="btn btn-sub" data-act="more">同じ種類をもう1問</button><button class="btn btn-main" data-act="next">${nextLabel}</button></div></div>`;
+      left += `<div class="feedback ng" role="status"><div class="fb-title">おしい。答えは</div><div class="fb-ans">${p.answerHTML}</div>${gainHTML()}<div class="note">右の「しくみ」で、考え方を1つずつ見てみよう。${sess.reviewed ? '' : `最後まで見ると 見直しボーナス +${PTS.review}点。`}</div><div class="fb-actions"><button class="btn btn-sub" data-act="more">同じ種類をもう1問</button><button class="btn btn-main" data-act="next">${nextLabel}</button></div></div>`;
     }
   } else if (!p.choices) {
     left += `<div class="keypad" role="group" aria-label="数字キー">${['7', '8', '9', '⌫', '4', '5', '6', '/', '1', '2', '3', 'と', '0', '.', 'C', 'go'].map((k) => {
@@ -2336,22 +2403,24 @@ function practiceHTML() {
   return `<div class="practice"><div class="col">${left}</div>${right}</div>`;
 }
 function resultHTML() {
-  const s = sess.saved || { n: 0, c: 0, items: [] };
-  const mins = Math.max(1, Math.round((s.endedAt - s.startedAt) / 60000));
-  let h = `<section class="result"><div class="score"><span class="big">${s.c} / ${s.n}</span><span>正解 (${mins}分)</span></div>`;
+  const s = sess.saved || { n: 0, c: 0, items: [], ms: 0, score: 0 };
+  const medal = s.medal || 0; const wrong = s.items.filter((x) => !x.ok);
+  let h = `<section class="result"><div class="score">${medal ? `<span class="medal big m${medal}">${MEDAL[medal]}</span>` : ''}<span class="big">${s.score} 点</span><span>${s.c} / ${s.n} 正解</span></div>`;
   h += `<p class="note">${sessLabel(sess.mode, sess.fixedLv)}</p>`;
-  if (sess.prevBest !== undefined && sess.prevBest !== null && s.c > sess.prevBest) h += `<div class="banner">いちばんよい点を更新しました (${sess.prevBest} → ${s.c})。</div>`;
-  const wrongTypes = [...new Set(s.items.filter((x) => !x.ok).map((x) => TYPE_NAMES[x.type] + (x.level ? ` (レベル${x.level})` : '')))];
+  h += `<div class="timebox"><div><span class="lb">解いた時間の合計</span><b>${fmtSec(s.ms)}</b></div><div><span class="lb">1問の平均</span><b>${fmtSec(s.ms / Math.max(1, s.n))}</b></div><div><span class="lb">はじめから終わりまで</span><b>${fmtSec(s.endedAt - s.startedAt)}</b><small>しくみを読んだ時間も入ります</small></div></div>`;
+  (sess.records || []).forEach((r) => { h += `<div class="banner">${r}</div>`; });
+  if (sess.mode !== 'auto' && sess.mode !== 'retry') h += `<p class="note">${nextMedalText(s.items)}</p>`;
+  const wrongTypes = [...new Set(wrong.map((x) => TYPE_NAMES[x.type] + (x.level ? ` (レベル${x.level})` : '')))];
   if (wrongTypes.length) h += `<p class="note">次の練習では、${wrongTypes.join('、')} を多めに出します。</p>`;
-  h += '<div class="list">' + s.items.map((x) => `<div class="li"><span class="m ${x.ok ? 'ok' : 'ng'}">${x.ok ? '○' : '–'}</span><span class="qq">${x.level ? `<span class="lvchip">Lv${x.level}</span> ` : ''}${esc(x.q)}${x.extra ? ' <span class="pill">もう1問</span>' : ''}</span><span class="aa">${x.ok ? esc(x.answer) : `答え ${esc(x.answer)}<br>入力 ${esc(x.given)}`}</span></div>`).join('') + '</div>';
-  h += `<div class="fb-actions"><button class="btn btn-main" data-act="start" data-v="${sess.mode}"${sess.fixedLv ? ` data-lv="${sess.fixedLv}"` : ''}>もう1回 同じ練習</button><button class="btn btn-line" data-act="tab" data-v="home">はじめの画面へ</button></div></section>`;
+  h += '<div class="list">' + s.items.map((x) => `<div class="li"><span class="m ${x.ok ? 'ok' : 'ng'}">${x.ok ? '○' : '–'}</span><span class="qq">${x.level ? `<span class="lvchip">Lv${x.level}</span> ` : ''}${esc(x.q)}${x.extra ? ' <span class="pill">もう1問</span>' : ''}${x.hint ? ' <span class="pill">しくみ</span>' : ''}${x.pb ? ' <span class="pill hot">自己ベスト</span>' : ''}</span><span class="aa">${x.ok ? esc(x.answer) : `答え ${esc(x.answer)}<br>入力 ${esc(x.given)}`}</span><span class="tt">${fmtSec(x.ms)}<br><small>+${x.pts || 0}点</small></span></div>`).join('') + '</div>';
+  h += `<div class="fb-actions">${wrong.length ? `<button class="btn btn-main" data-act="retry">まちがえた ${wrong.length}問に リベンジ</button>` : ''}${sess.mode !== 'retry' ? `<button class="btn ${wrong.length ? 'btn-sub' : 'btn-main'}" data-act="start" data-v="${sess.mode}"${sess.fixedLv ? ` data-lv="${sess.fixedLv}"` : ''}>もう1回 同じ練習</button>` : ''}<button class="btn btn-line" data-act="tab" data-v="home">はじめの画面へ</button></div>${wrong.length ? '<p class="note">リベンジは、まちがえた問題と 同じ種類の問題です (数はかわります)。</p>' : ''}</section>`;
   return h;
 }
 function fmtDate(t) { const d = new Date(t); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
 let confirmReset = false;
 let copyState = null; // null | 'ok' | 'manual'
 function exportText() {
-  const sessions = state.sessions.slice(0, 30).map((s) => ({ at: new Date(s.endedAt).toISOString(), mode: s.mode, n: s.n, c: s.c, min: Math.round((s.endedAt - s.startedAt) / 6000) / 10, quit: s.quit || undefined,
+  const sessions = state.sessions.slice(0, 30).map((s) => ({ at: new Date(s.endedAt).toISOString(), mode: s.mode, n: s.n, c: s.c, min: Math.round((s.endedAt - s.startedAt) / 6000) / 10, solveSec: s.ms ? Math.round(s.ms / 1000) : undefined, score: s.score, medal: s.medal || undefined, quit: s.quit || undefined,
     items: s.items.map((x) => [x.type + (x.level ? ':' + x.level : ''), x.ok ? 1 : 0, x.hint ? 1 : 0, Math.round(x.ms / 1000), x.q, x.given, x.answer]) }));
   return '計算と単位の練習帳 記録\n' + JSON.stringify({ v: 2, exportedAt: new Date().toISOString(), best: state.best, mistakes: state.mistakes, typeStats: state.typeStats, itemsFormat: ['type', 'ok', 'hint', 'sec', 'q', 'given', 'answer'], sessions });
 }
@@ -2381,7 +2450,7 @@ function parentHTML() {
   if (!state.sessions.length) h += '<p class="note">まだ記録がありません。</p>';
   state.sessions.slice(0, 20).forEach((s) => {
     const mins = Math.max(1, Math.round((s.endedAt - s.startedAt) / 60000));
-    h += `<details class="sess"><summary><span>${fmtDate(s.endedAt)}</span><span>${sessLabel(s.mode, s.lv)}</span><span>${s.c} / ${s.n} 正解</span><span>${mins}分</span>${s.quit ? '<span class="pill">途中でやめた</span>' : ''}</summary><div class="list" style="border:0;border-top:1px solid var(--rule);border-radius:0">${s.items.map((x) => `<div class="li"><span class="m ${x.ok ? 'ok' : 'ng'}">${x.ok ? '○' : '–'}</span><span class="qq">${esc(x.q)}${x.hint ? ' <span class="pill">しくみ</span>' : ''}</span><span class="aa">${x.ok ? `${Math.round(x.ms / 1000)}秒` : `答え ${esc(x.answer)} / 入力 ${esc(x.given)}`}</span></div>`).join('')}</div></details>`;
+    h += `<details class="sess"><summary><span>${fmtDate(s.endedAt)}</span><span>${sessLabel(s.mode, s.lv)}</span><span>${s.c} / ${s.n} 正解</span><span>${s.score != null ? `${s.score}点` : ''}</span><span>${s.ms ? `解いた時間 ${fmtSec(s.ms)}` : `${mins}分`}</span>${medalHTML(s.medal)}${s.quit ? '<span class="pill">途中でやめた</span>' : ''}</summary><div class="list" style="border:0;border-top:1px solid var(--rule);border-radius:0">${s.items.map((x) => `<div class="li"><span class="m ${x.ok ? 'ok' : 'ng'}">${x.ok ? '○' : '–'}</span><span class="qq">${esc(x.q)}${x.hint ? ' <span class="pill">しくみ</span>' : ''}</span><span class="aa">${x.ok ? '' : `答え ${esc(x.answer)} / 入力 ${esc(x.given)}`}</span><span class="tt">${fmtSec(x.ms)}</span></div>`).join('')}</div></details>`;
   });
   h += '</div>';
   h += `<div class="sec"><h2>記録を Claude に送る</h2><p class="note">ボタンをおすと記録がコピーされます。プロジェクトのスレッドに貼り付けて送ってください。次の改善に使います。</p><div class="fb-actions"><button class="btn btn-sub" data-act="copy">記録をコピー</button>${copyState === 'ok' ? '<span class="pill on" role="status">コピーしました</span>' : ''}</div>${copyState === 'manual' ? '<p class="note" role="status">自動でコピーできませんでした。下の文字を全部選んでコピーしてください。</p><textarea id="export-box" readonly style="width:100%;min-height:140px;font-family:var(--f-mono);font-size:.8rem;background:var(--paper);color:var(--ink);border:1px solid var(--rule);border-radius:8px;padding:8px">' + esc(exportText()) + '</textarea>' : ''}</div>`;
@@ -2485,10 +2554,11 @@ document.addEventListener('click', (e) => {
   else if (a === 'submit') submit();
   else if (a === 'next') { nextProblem(); window.scrollTo(0, 0); }
   else if (a === 'more') { oneMore(); window.scrollTo(0, 0); }
+  else if (a === 'retry') { const w = sess.saved.items.filter((x) => !x.ok); startSession('retry', null, w.map((x) => ({ type: x.type, level: x.level }))); window.scrollTo(0, 0); }
   else if (a === 'explain') showExplain();
   else if (a === 'side') { if (v === 'explain') showExplain(); else { sess.sideTab = 'memo'; render(); } }
   else if (a === 'fprev') { sess.frame = Math.max(0, sess.frame - 1); render(); }
-  else if (a === 'fnext') { sess.frame = Math.min(frames().length - 1, sess.frame + 1); if (sess.phase === 'done') { const ts = state.typeStats[sess.problem.type]; if (ts && !sess.reviewed) { ts.review++; sess.reviewed = true; saveLocal(); } } render(); }
+  else if (a === 'fnext') { sess.frame = Math.min(frames().length - 1, sess.frame + 1); if (sess.phase === 'done') { const ts = state.typeStats[sess.problem.type]; if (ts && !sess.reviewed) { ts.review++; sess.reviewed = true; saveLocal(); } const it = sess.items[sess.items.length - 1]; if (it && !it.ok && !it.review && sess.frame === frames().length - 1) { it.review = true; it.pts += PTS.review; sess.score += PTS.review; } } render(); }
   else if (a === 'clear') { if (memo) memo.clear(); }
   else if (a === 'finger') { state.finger = !state.finger; saveLocal(); render(); }
   else if (a === 'quit') finishSession(true);
@@ -2511,6 +2581,18 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Tab' && sess.problem.slots.length > 1 && sess.phase === 'answer') { sess.active = (sess.active + 1) % sess.problem.slots.length; render(); e.preventDefault(); }
 });
 
+// 時間: 画面がかくれている間 (ほかのアプリ・スリープ) は数えない
+document.addEventListener('visibilitychange', () => {
+  if (!sess || sess.phase !== 'answer') return;
+  if (document.hidden) sess.hiddenAt = Date.now();
+  else if (sess.hiddenAt) { sess.t0 += Date.now() - sess.hiddenAt; sess.hiddenAt = null; }
+});
+setInterval(() => {
+  if (view !== 'practice' || !sess || sess.phase !== 'answer') return;
+  const a = document.getElementById('tmr'), b = document.getElementById('tmr-all');
+  if (a) a.textContent = fmtClock(elapsed());
+  if (b) b.textContent = fmtClock(sess.items.reduce((x, y) => x + y.ms, 0) + elapsed());
+}, 500);
 render();
 initDb();
 </script>

@@ -154,6 +154,24 @@ table.mx td, table.mx th { text-align: center; }
 .ueq .op { margin: 0 4px; }
 .uq .n + .u, .uqf .n + .u { margin-left: 5px; }
 .choices .uqf, .choices .uq { font-size: 1.6rem; }
+.clock { display: flex; gap: 16px; font-size: .9rem; color: var(--ink-2); order: 3; flex-basis: 100%; }
+.clock b { font-variant-numeric: tabular-nums; color: var(--ink); }
+.gain { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: .95rem; margin: 4px 0 2px; }
+.gain span { font-variant-numeric: tabular-nums; }
+.gain .hot, .pill.hot { color: var(--mark); font-weight: 700; }
+.medal { display: inline-grid; place-items: center; width: 1.7em; height: 1.7em; border-radius: 50%; font-size: .75rem; font-weight: 800; margin-right: 4px; color: #fff; vertical-align: middle; }
+.medal.m1 { background: #a8673a; } .medal.m2 { background: #8a949e; } .medal.m3 { background: #c8960c; }
+.medal.big { width: 2.6em; height: 2.6em; font-size: 1.3rem; }
+.medals { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-bottom: 12px; }
+.medals .lb { font-weight: 700; font-size: .9rem; }
+.medals small { flex-basis: 100%; color: var(--ink-2); font-size: .78rem; }
+.timebox { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 10px 0; }
+.timebox > div { border: 1px solid var(--rule); border-radius: var(--r); padding: 10px 14px; display: grid; gap: 2px; }
+.timebox .lb { font-size: .8rem; color: var(--ink-2); font-weight: 700; }
+.timebox b { font-size: 1.3rem; font-variant-numeric: tabular-nums; }
+.timebox small { font-size: .72rem; color: var(--ink-2); }
+.li .tt { font-variant-numeric: tabular-nums; text-align: right; font-size: .9rem; white-space: nowrap; }
+.li .tt small { color: var(--ink-2); }
 .figcap { font-size: .85rem; font-weight: 700; color: var(--ink-2); margin: 6px 0 2px; }
 .expr.grpd { font-size: 1.4rem; padding: 8px 0; }
 .grp { display: inline-block; border: 2px solid var(--mark); border-radius: 8px; padding: 0 6px; margin: 0 2px; }
@@ -244,7 +262,7 @@ table.pv td.carry { background: var(--hl); }
 .score { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
 .score .big { font-family: var(--f-display); font-size: 3.4rem; font-weight: 700; color: var(--board); font-variant-numeric: tabular-nums; }
 .list { background: var(--sheet); border: 1px solid var(--rule); border-radius: var(--r); }
-.li { display: grid; grid-template-columns: 2.4em minmax(0, 1fr) auto; gap: 12px; padding: 12px 16px; border-top: 1px solid var(--rule); align-items: center; }
+.li { display: grid; grid-template-columns: 2.4em minmax(0, 1fr) auto auto; gap: 12px; padding: 12px 16px; border-top: 1px solid var(--rule); align-items: center; }
 .li:first-child { border-top: 0; }
 .li .m { font-family: var(--f-display); font-weight: 700; font-size: 1.3rem; text-align: center; }
 .li .m.ok { color: var(--mark); }
