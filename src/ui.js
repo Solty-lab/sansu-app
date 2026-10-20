@@ -226,6 +226,7 @@ function finishSession(quit) {
   if (sess.items.length) {
     const s = { id: sess.id, mode: sess.mode, lv: sess.fixedLv || undefined, startedAt: sess.startedAt, endedAt: Date.now(), n: sess.items.length, c: sess.items.filter((x) => x.ok).length, items: sess.items, quit: !!quit, score: sess.score, ms: sess.items.reduce((a, x) => a + x.ms, 0), medal: quit ? 0 : medalOf(sess.items) };
     state.sessions.unshift(s); state.sessions = state.sessions.slice(0, 60);
+    sess.xpBefore = totalXP(); state.xp = sess.xpBefore + (s.score || 0);
     state.updatedAt = Date.now();
     saveLocal();
     saveRemote(s);
@@ -242,7 +243,7 @@ const app = () => document.getElementById('app');
 
 function header() {
   const tab = (id, label) => `<button data-act="tab" data-v="${id}" aria-pressed="${(view === id || (id === 'home' && ['practice', 'result', 'lesson'].includes(view)))}">${label}</button>`;
-  return `<header class="top"><div class="brand"><span class="sq" aria-hidden="true"></span>計算と単位の練習帳</div><nav class="tabs" aria-label="画面">${tab('home', 'れんしゅう')}${tab('parent', 'きろく (保護者)')}</nav></header>`;
+  return `<header class="top"><div class="brand"><span class="sq" aria-hidden="true"></span>計算と単位の練習帳</div><nav class="tabs" aria-label="画面">${tab('home', 'れんしゅう')}${tab('mine', 'じぶんの記録')}${tab('parent', 'きろく (保護者)')}</nav></header>`;
 }
 function dotsHTML(arr, total = 10) {
   let s = '<span class="dots" aria-hidden="true">';
@@ -304,7 +305,7 @@ function practiceHTML() {
     dots += `<i class="${it ? (it.ok ? 'ok' : 'ng') : ''}${i === sess.idx ? ' now' : ''}"></i>`; k++;
   });
   dots += '</span>';
-  let left = `<div class="pbar">${dots}<span class="count">${isExtra ? 'もう1問 (同じレベル)' : `${doneMain + 1} / ${main} 問目`}</span><span class="clock" aria-label="時間"><span>この問題 <b id="tmr">${fmtClock(sess.phase === 'answer' ? elapsed() : (sess.items[sess.items.length - 1] || { ms: 0 }).ms)}</b></span><span>合計 <b id="tmr-all">${fmtClock(sess.items.reduce((a, x) => a + x.ms, 0) + (sess.phase === 'answer' ? elapsed() : 0))}</b></span><span>点数 <b>${sess.score}</b></span></span><button class="btn btn-line" data-act="quit" style="padding:8px 14px;font-size:.9rem">やめる</button></div>`;
+  let left = `<div class="pbar">${dots}<span class="count">${isExtra ? 'もう1問 (同じレベル)' : `${doneMain + 1} / ${main} 問目`}</span><span class="clock">${sess.phase === 'done' ? `<span>この問題 <b>${fmtSec((sess.items[sess.items.length - 1] || { ms: 0 }).ms)}</b></span><span>ここまでの合計 <b>${fmtSec(sess.items.reduce((a, x) => a + x.ms, 0))}</b></span>` : '<span>時間は、答えたあとに出ます</span>'}<span>点数 <b>${sess.score}</b></span></span><button class="btn btn-line" data-act="quit" style="padding:8px 14px;font-size:.9rem">やめる</button></div>`;
   if (sess.idx === 0 && p.level) left += `<p class="pnote">${sess.fixedLv ? `レベル${sess.fixedLv} の問題を 10問 やります。` : '1問ごとに少しずつ むずかしくなります (レベル1 → 5)。'}</p>`;
   const lvInfo = p.level ? STAGES[p.stage].levels[p.level] : null;
   left += `<div class="qcard"><div class="qmeta"><span class="code">${p.stage}</span>${p.level ? `<span class="lvchip">レベル ${p.level} / 5</span>` : ''}<span>${TYPE_NAMES[p.type]}</span>${lvInfo ? `<span class="lvname">${lvInfo.name}</span>` : ''}</div>`;
@@ -362,11 +363,96 @@ function resultHTML() {
   h += `<p class="note">${sessLabel(sess.mode, sess.fixedLv)}</p>`;
   h += `<div class="timebox"><div><span class="lb">解いた時間の合計</span><b>${fmtSec(s.ms)}</b></div><div><span class="lb">1問の平均</span><b>${fmtSec(s.ms / Math.max(1, s.n))}</b></div><div><span class="lb">はじめから終わりまで</span><b>${fmtSec(s.endedAt - s.startedAt)}</b><small>しくみを読んだ時間も入ります</small></div></div>`;
   (sess.records || []).forEach((r) => { h += `<div class="banner">${r}</div>`; });
+  if (sess.xpBefore != null) { const a = rankOf(sess.xpBefore), b = rankOf(totalXP()); h += b.i > a.i ? `<div class="banner">ランクアップ！「${b.name}」になりました。</div>` : `<p class="note">ランク「${b.name}」: ${b.next ? `次のランクまで あと ${b.next - totalXP()}点` : 'いちばん上のランクです'}</p>`; }
   if (sess.mode !== 'auto' && sess.mode !== 'retry') h += `<p class="note">${nextMedalText(s.items)}</p>`;
   const wrongTypes = [...new Set(wrong.map((x) => TYPE_NAMES[x.type] + (x.level ? ` (レベル${x.level})` : '')))];
   if (wrongTypes.length) h += `<p class="note">次の練習では、${wrongTypes.join('、')} を多めに出します。</p>`;
   h += '<div class="list">' + s.items.map((x) => `<div class="li"><span class="m ${x.ok ? 'ok' : 'ng'}">${x.ok ? '○' : '–'}</span><span class="qq">${x.level ? `<span class="lvchip">Lv${x.level}</span> ` : ''}${esc(x.q)}${x.extra ? ' <span class="pill">もう1問</span>' : ''}${x.hint ? ' <span class="pill">しくみ</span>' : ''}${x.pb ? ' <span class="pill hot">自己ベスト</span>' : ''}</span><span class="aa">${x.ok ? esc(x.answer) : `答え ${esc(x.answer)}<br>入力 ${esc(x.given)}`}</span><span class="tt">${fmtSec(x.ms)}<br><small>+${x.pts || 0}点</small></span></div>`).join('') + '</div>';
-  h += `<div class="fb-actions">${wrong.length ? `<button class="btn btn-main" data-act="retry">まちがえた ${wrong.length}問に リベンジ</button>` : ''}${sess.mode !== 'retry' ? `<button class="btn ${wrong.length ? 'btn-sub' : 'btn-main'}" data-act="start" data-v="${sess.mode}"${sess.fixedLv ? ` data-lv="${sess.fixedLv}"` : ''}>もう1回 同じ練習</button>` : ''}<button class="btn btn-line" data-act="tab" data-v="home">はじめの画面へ</button></div>${wrong.length ? '<p class="note">リベンジは、まちがえた問題と 同じ種類の問題です (数はかわります)。</p>' : ''}</section>`;
+  h += `<div class="fb-actions">${wrong.length ? `<button class="btn btn-main" data-act="retry">まちがえた ${wrong.length}問に リベンジ</button>` : ''}${sess.mode !== 'retry' ? `<button class="btn ${wrong.length ? 'btn-sub' : 'btn-main'}" data-act="start" data-v="${sess.mode}"${sess.fixedLv ? ` data-lv="${sess.fixedLv}"` : ''}>もう1回 同じ練習</button>` : ''}<button class="btn btn-line" data-act="tab" data-v="mine">じぶんの記録を見る</button><button class="btn btn-line" data-act="tab" data-v="home">はじめの画面へ</button></div>${wrong.length ? '<p class="note">リベンジは、まちがえた問題と 同じ種類の問題です (数はかわります)。</p>' : ''}</section>`;
+  return h;
+}
+
+// ===== じぶんの記録 (娘さん用) =====
+const RANKS = [[0, '計算のたまご'], [500, '計算ひよこ'], [1500, '計算みならい'], [3000, '計算がんばりや'], [5000, '計算いちにんまえ'], [8000, '計算じょうず'], [12000, '計算たつじん'], [17000, '計算めいじん'], [23000, '計算マスター'], [30000, '計算はかせ']];
+function totalXP() { return state.xp != null ? state.xp : state.sessions.reduce((a, x) => a + (x.score || 0), 0); }
+function rankOf(xp) { let i = 0; RANKS.forEach(([t], k) => { if (xp >= t) i = k; }); return { i, name: RANKS[i][1], from: RANKS[i][0], next: RANKS[i + 1] ? RANKS[i + 1][0] : null }; }
+const courseLabel = (k) => { const [m, lv] = k.split(':'); return lv ? `${m} レベル${lv}` : `${m} ${STAGES[m].levels ? '1→5' : ''}`.trim(); };
+// 10問を最後まで答えた練習 (古い順)
+function courseRuns(k) { return state.sessions.filter((x) => !x.quit && x.mode !== 'auto' && x.mode !== 'retry' && sessKey(x.mode, x.lv) === k && x.items.filter((i) => !i.extra).length >= SESSION_LEN).slice().reverse(); }
+// 点数の折れ線 (1本だけ・小さく)。ふれると点数が出る
+function sparkSVG(vals) {
+  const W = 220, H = 56, pad = 6; const n = vals.length; if (!n) return '';
+  // 縦の目もりは、その練習の点数のはばに合わせる (変化が見えるように)
+  const lo = Math.max(0, Math.min(...vals) - 150), hi = Math.max(...vals) + 50;
+  const X = (i) => (n === 1 ? W / 2 : pad + (W - 2 * pad) * i / (n - 1)), Y = (v) => H - pad - (H - 2 * pad) * (v - lo) / (hi - lo);
+  let b = `<line class="sp-base" x1="${pad}" y1="${H - pad}" x2="${W - pad}" y2="${H - pad}"/>`;
+  if (n > 1) b += `<polyline class="sp-line" points="${vals.map((v, i) => `${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(' ')}"/>`;
+  vals.forEach((v, i) => { b += `<circle class="sp-dot${i === n - 1 ? ' last' : ''}" cx="${X(i).toFixed(1)}" cy="${Y(v).toFixed(1)}" r="${i === n - 1 ? 5 : 4}"><title>${i + 1}回目 ${v}点</title></circle>`; });
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" role="img" aria-label="点数のうつりかわり ${vals.join('、')}点">${b}</svg>`;
+}
+// 種類ごと: 最近の10問と、その前の10問の正答率・正解までの時間
+function typeTrends() {
+  const by = {};
+  state.sessions.slice().reverse().forEach((x) => x.items.forEach((it) => { (by[it.type] = by[it.type] || []).push(it); }));
+  return Object.entries(by).map(([t, arr]) => {
+    const rec = arr.slice(-10), prev = arr.slice(-20, -10);
+    const rate = (a) => (a.length ? Math.round(a.filter((i) => i.ok).length / a.length * 100) : null);
+    const okMs = (a) => { const o = a.filter((i) => i.ok && !i.hint); return o.length ? o.reduce((s2, i) => s2 + i.ms, 0) / o.length : null; };
+    return { t, n: arr.length, r: rate(rec), pr: prev.length >= 5 ? rate(prev) : null, ms: okMs(rec), pms: prev.length >= 5 ? okMs(prev) : null };
+  }).sort((a, b) => a.r - b.r);
+}
+function mineHTML() {
+  const xp = totalXP(); const rk = rankOf(xp);
+  const ks = allCourses(); const cnt = [0, 0, 0, 0]; ks.forEach((k) => { const b = state.best[k]; cnt[b && b.medal ? b.medal : 0]++; });
+  const allItems = state.sessions.reduce((a, x) => a + x.n, 0), allOk = state.sessions.reduce((a, x) => a + x.c, 0);
+  let h = '<section class="mine">';
+  // ランク
+  const pct = rk.next ? Math.round((xp - rk.from) / (rk.next - rk.from) * 100) : 100;
+  h += `<div class="rank-card"><div><span class="lb">いまのランク</span><div class="rk">${rk.name}</div><div class="xpbar" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><i style="width:${pct}%"></i></div><div class="sub">${rk.next ? `次の「${RANKS[rk.i + 1][1]}」まで あと <b>${rk.next - xp}点</b>` : 'いちばん上のランク！'} (これまでの点数の合計 ${xp}点)</div></div>`;
+  h += `<div class="stats"><div><span class="lb">といた問題</span><b>${allItems}</b>問</div><div><span class="lb">正解</span><b>${allItems ? Math.round(allOk / allItems * 100) : 0}</b>%</div><div><span class="lb">メダル</span><b>${cnt[1] + cnt[2] + cnt[3]}</b> / ${ks.length}</div></div></div>`;
+  // つぎのめあて
+  const goals = [];
+  ks.forEach((k) => { const b = state.best[k]; if (b && b.medal === 2) goals.push({ k, s: `${courseLabel(k)} で 金メダル (しくみを見ずに10問正解)`, w: 3 }); });
+  ks.forEach((k) => { const b = state.best[k]; if (b && b.medal === 1) goals.push({ k, s: `${courseLabel(k)} で 銀メダル (9問以上)`, w: 2 }); });
+  ks.forEach((k) => { const b = state.best[k]; if (b && b.medal === 3 && b.ms) goals.push({ k, s: `${courseLabel(k)} の 全問正解タイム ${fmtSec(b.ms)} を ちぢめる`, w: 1 }); });
+  const tt = typeTrends().filter((x) => x.n >= 3 && x.r < 80);
+  tt.slice(0, 1).forEach((x) => { const st = stageOfType(x.t); goals.unshift({ k: st, s: `にがてな「${TYPE_NAMES[x.t]}」(最近 ${x.r}%) を 80% 以上に`, w: 4 }); });
+  if (!goals.length) ks.filter((k) => !state.best[k]).slice(0, 2).forEach((k) => goals.push({ k, s: `${courseLabel(k)} に はじめてチャレンジ`, w: 0 }));
+  h += `<div class="sec"><h2>つぎのめあて</h2><div class="goals">${goals.slice(0, 3).map((g) => `<button class="goal" data-act="course" data-v="${g.k}"><span>${g.s}</span><span class="go">やってみる</span></button>`).join('')}</div></div>`;
+  // 攻略マップ
+  h += `<div class="sec"><h2>攻略マップ</h2><p class="note">金 = しくみを見ずに10問正解、銀 = 9問以上、銅 = 7問以上。ます目をおすと、その練習が始まります。</p><div class="map">`;
+  for (const t of Object.keys(TRACKS)) {
+    TRACKS[t].stages.forEach((st) => {
+      const keys = STAGES[st].levels ? [...Object.keys(STAGES[st].levels).map((n) => `${st}:${n}`), st] : [st];
+      h += `<div class="map-row"><div class="map-st"><span class="code">${st}</span>${STAGES[st].name}</div><div class="map-cells">${keys.map((k) => { const b = state.best[k]; const m = b && b.medal ? b.medal : 0; const lv = k.split(':')[1]; return `<button class="cell${m ? ' got' : b ? ' tried' : ''}" data-act="course" data-v="${k}" aria-label="${courseLabel(k)} ${m ? MEDAL[m] + 'メダル' : b ? 'チャレンジ中' : 'まだ'}">${m ? medalHTML(m) : `<span class="empty">${b ? '…' : ''}</span>`}<span class="cl">${lv ? `Lv${lv}` : STAGES[st].levels ? '1→5' : '10問'}</span>${b && b.score ? `<span class="cs">${b.score}点</span>` : ''}</button>`; }).join('')}</div></div>`;
+    });
+  }
+  h += '</div></div>';
+  // のびたところ
+  const grow = ks.map((k) => ({ k, runs: courseRuns(k) })).filter((x) => x.runs.length >= 1);
+  h += '<div class="sec"><h2>のびたところ</h2>';
+  if (!grow.length) h += '<p class="note">10問を最後まで答えると、ここに点数のうつりかわりが出ます。</p>';
+  else h += '<div class="grow">' + grow.map(({ k, runs }) => {
+    const sc = runs.slice(-8).map((x) => x.score || 0); const first = runs[0], last = runs[runs.length - 1];
+    const d = (last.score || 0) - (first.score || 0); const dc = last.c - first.c;
+    const ft = runs.filter((x) => x.c === SESSION_LEN && x.ms);
+    return `<div class="gcard"><div class="gh"><b>${courseLabel(k)}</b>${medalHTML((state.best[k] || {}).medal)}</div>${sparkSVG(sc)}<div class="gs">${runs.length >= 2 ? `<span>1回目 ${first.score || 0}点 → 最新 ${last.score || 0}点 <b class="${d > 0 ? 'up' : d < 0 ? 'down' : ''}">${d > 0 ? `+${d}` : d}</b></span><span>正解 ${first.c} → ${last.c}問${dc > 0 ? ' <b class="up">アップ</b>' : ''}</span>` : `<span>1回目 ${first.score || 0}点 (${first.c}問正解)</span><span>もう1回やると、くらべられます</span>`}${ft.length >= 2 ? `<span>全問正解タイム ${fmtSec(ft[0].ms)} → ${fmtSec(ft[ft.length - 1].ms)}</span>` : ''}</div></div>`;
+  }).join('') + '</div>';
+  h += '</div>';
+  // 種類ごとの できぐあい
+  const trs = typeTrends();
+  h += '<div class="sec"><h2>種類ごとの できぐあい</h2><p class="note">それぞれ最近の10問の正解の割合です。矢印は、その前の10問とくらべて上がったか下がったか。時間は しくみを見ずに正解した問題の平均です。</p>';
+  if (!trs.length) h += '<p class="note">まだ記録がありません。</p>';
+  else h += '<div class="trend">' + trs.map((x) => {
+    const arr = x.pr == null ? '' : x.r > x.pr ? `<span class="up">↑ ${x.r - x.pr}</span>` : x.r < x.pr ? `<span class="down">↓ ${x.pr - x.r}</span>` : '<span>→</span>';
+    const tm = x.ms == null ? '' : `${fmtSec(x.ms)}${x.pms != null && x.ms < x.pms * 0.9 ? ' <span class="up">はやくなった</span>' : ''}`;
+    return `<div class="tr"><span class="tn">${TYPE_NAMES[x.t]}</span><span class="tbar" title="${x.r}%"><i style="width:${x.r}%" class="${x.r < 70 ? 'low' : ''}"></i></span><span class="tv">${x.r}% ${arr}</span><span class="tt">${tm}</span></div>`;
+  }).join('') + '</div>';
+  h += '</div>';
+  // さいきん
+  h += '<div class="sec"><h2>さいきんの練習</h2>';
+  h += state.sessions.length ? '<div class="list">' + state.sessions.slice(0, 6).map((x) => `<div class="li"><span class="m">${medalHTML(x.medal) || '・'}</span><span class="qq">${fmtDate(x.endedAt)} ${sessLabel(x.mode, x.lv)}${x.quit ? ' <span class="pill">とちゅうまで</span>' : ''}</span><span class="aa">${x.c} / ${x.n} 正解 ${x.score != null ? `${x.score}点` : ''}</span><span class="tt">${x.ms ? fmtSec(x.ms) : ''}</span></div>`).join('') + '</div>' : '<p class="note">まだ記録がありません。</p>';
+  h += '</div></section>';
   return h;
 }
 function fmtDate(t) { const d = new Date(t); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
@@ -423,6 +509,7 @@ function render() {
   else if (view === 'practice') body = practiceHTML();
   else if (view === 'result') body = resultHTML();
   else if (view === 'lesson') body = lessonHTML();
+  else if (view === 'mine') body = mineHTML();
   else body = parentHTML();
   el.innerHTML = `<div class="wrap">${header()}${body}</div>`;
   if (view === 'practice' && sess.sideTab === 'memo') attachMemo();
@@ -507,6 +594,7 @@ document.addEventListener('click', (e) => {
   else if (a === 'submit') submit();
   else if (a === 'next') { nextProblem(); window.scrollTo(0, 0); }
   else if (a === 'more') { oneMore(); window.scrollTo(0, 0); }
+  else if (a === 'course') { const [m, lv] = v.split(':'); startSession(m, lv || null); window.scrollTo(0, 0); }
   else if (a === 'retry') { const w = sess.saved.items.filter((x) => !x.ok); startSession('retry', null, w.map((x) => ({ type: x.type, level: x.level }))); window.scrollTo(0, 0); }
   else if (a === 'explain') showExplain();
   else if (a === 'side') { if (v === 'explain') showExplain(); else { sess.sideTab = 'memo'; render(); } }
@@ -540,11 +628,5 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) sess.hiddenAt = Date.now();
   else if (sess.hiddenAt) { sess.t0 += Date.now() - sess.hiddenAt; sess.hiddenAt = null; }
 });
-setInterval(() => {
-  if (view !== 'practice' || !sess || sess.phase !== 'answer') return;
-  const a = document.getElementById('tmr'), b = document.getElementById('tmr-all');
-  if (a) a.textContent = fmtClock(elapsed());
-  if (b) b.textContent = fmtClock(sess.items.reduce((x, y) => x + y.ms, 0) + elapsed());
-}, 500);
 render();
 initDb();

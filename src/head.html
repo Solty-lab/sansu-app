@@ -172,6 +172,50 @@ table.mx td, table.mx th { text-align: center; }
 .timebox small { font-size: .72rem; color: var(--ink-2); }
 .li .tt { font-variant-numeric: tabular-nums; text-align: right; font-size: .9rem; white-space: nowrap; }
 .li .tt small { color: var(--ink-2); }
+.mine { display: grid; gap: 18px; max-width: 980px; margin: 0 auto; width: 100%; }
+.rank-card { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 16px; background: var(--sheet); border: 1px solid var(--rule); border-radius: var(--r); padding: 18px 20px; }
+@media (max-width: 720px) { .rank-card { grid-template-columns: 1fr; } }
+.rank-card .lb, .stats .lb { display: block; font-size: .8rem; color: var(--ink-2); font-weight: 700; }
+.rank-card .rk { font-size: 1.7rem; font-weight: 800; margin: 2px 0 8px; }
+.xpbar { height: 14px; border-radius: 7px; background: var(--rule); overflow: hidden; }
+.xpbar i { display: block; height: 100%; background: var(--board); border-radius: 7px; }
+.rank-card .sub { font-size: .88rem; color: var(--ink-2); margin-top: 6px; }
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; align-content: center; }
+.stats > div { text-align: center; }
+.stats b { font-size: 1.6rem; font-variant-numeric: tabular-nums; }
+.goals { display: grid; gap: 8px; }
+.goal { display: flex; justify-content: space-between; align-items: center; gap: 12px; text-align: left; padding: 14px 16px; border: 1px solid var(--rule); border-radius: var(--r); background: var(--sheet); color: var(--ink); font: inherit; cursor: pointer; }
+.goal .go { font-weight: 700; color: var(--board-ink); background: var(--board); border-radius: 8px; padding: 6px 12px; white-space: nowrap; font-size: .9rem; }
+.map { display: grid; gap: 8px; }
+.map-row { display: grid; grid-template-columns: 13em minmax(0, 1fr); gap: 10px; align-items: center; }
+@media (max-width: 720px) { .map-row { grid-template-columns: 1fr; } }
+.map-st { font-size: .9rem; font-weight: 700; display: flex; gap: 6px; align-items: center; }
+.map-cells { display: flex; flex-wrap: wrap; gap: 6px; }
+.cell { width: 74px; height: 74px; border: 1.5px dashed var(--rule); border-radius: 12px; background: transparent; color: var(--ink); display: grid; place-items: center; align-content: center; gap: 2px; font: inherit; cursor: pointer; padding: 4px; }
+.cell.tried { border-style: solid; }
+.cell.got { border-style: solid; border-color: var(--board); background: var(--board-soft); }
+.cell .empty { width: 26px; height: 26px; border-radius: 50%; border: 1.5px dashed var(--ink-2); display: grid; place-items: center; font-size: .7rem; color: var(--ink-2); }
+.cell .medal { margin: 0; }
+.cell .cl { font-size: .72rem; font-weight: 700; }
+.cell .cs { font-size: .66rem; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.grow { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px; }
+.gcard { border: 1px solid var(--rule); border-radius: var(--r); padding: 12px 14px; background: var(--sheet); display: grid; gap: 6px; }
+.gh { display: flex; justify-content: space-between; align-items: center; }
+.gs { display: grid; gap: 2px; font-size: .85rem; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.up { color: var(--board); font-weight: 700; } .down { color: var(--mark); font-weight: 700; }
+.spark { width: 100%; max-width: 260px; height: 56px; }
+.spark .sp-base { stroke: var(--rule); stroke-width: 1; }
+.spark .sp-line { fill: none; stroke: var(--board); stroke-width: 2; stroke-linejoin: round; }
+.spark .sp-dot { fill: var(--board); stroke: var(--sheet); stroke-width: 2; }
+.spark .sp-dot.last { fill: var(--board); }
+.trend { display: grid; gap: 6px; }
+.tr { display: grid; grid-template-columns: 11em minmax(60px, 1fr) 6.5em 9em; gap: 10px; align-items: center; font-size: .9rem; }
+@media (max-width: 720px) { .tr { grid-template-columns: 8em minmax(40px, 1fr) 5.5em; } .tr .tt { grid-column: 1 / -1; } }
+.tbar { height: 12px; background: var(--rule); border-radius: 6px; overflow: hidden; }
+.tbar i { display: block; height: 100%; background: var(--board); border-radius: 6px; }
+.tbar i.low { background: var(--warn); }
+.tr .tv, .tr .tt { font-variant-numeric: tabular-nums; }
+@media (max-width: 600px) { .mine .li { grid-template-columns: 2.4em minmax(0, 1fr); } .mine .li .aa, .mine .li .tt { grid-column: 2; text-align: left; } }
 .figcap { font-size: .85rem; font-weight: 700; color: var(--ink-2); margin: 6px 0 2px; }
 .expr.grpd { font-size: 1.4rem; padding: 8px 0; }
 .grp { display: inline-block; border: 2px solid var(--mark); border-radius: 8px; padding: 0 6px; margin: 0 2px; }
