@@ -16,6 +16,9 @@ page() { # $1 = PAGE, $2 = タイトル
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="$2">
+<link rel="apple-touch-icon" href="icons/$1-180.png">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/$1-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/$1-192.png">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
 H
   cat src/head.html; printf '</head>\n<body>\n'; body "$1"; printf '</body>\n</html>\n'
@@ -23,5 +26,5 @@ H
 page child '練習帳' > index.html
 # お試しは 保護者ページの「お試し」タブにまとめた (v1.8.2)。以前のリンク用に転送だけ残す
 printf '<!doctype html><meta charset="utf-8"><title>練習帳 保護者ページ</title><meta http-equiv="refresh" content="0; url=parent.html#trial"><p><a href="parent.html#trial">保護者ページの「お試し」へ</a></p>\n' > trial.html
-page parent '練習帳 保護者' | sed 's|<title>計算と単位の練習帳</title>|<title>練習帳 保護者ページ</title>|' > parent.html
+page parent '保護者ページ' | sed 's|<title>計算と単位の練習帳</title>|<title>練習帳 保護者ページ</title>|' > parent.html
 { cat src/head.html; body all; } > dist/keisan-tani.html

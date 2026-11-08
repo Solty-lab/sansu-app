@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFE45C"/><stop offset="1" stop-color="#FFB020"/></linearGradient>
+    <filter id="sh" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="8" stdDeviation="6" flood-color="#9A5B00" flood-opacity=".35"/></filter>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <g filter="url(#sh)" font-family="Arial Rounded MT Bold, Arial, Helvetica, sans-serif" font-weight="900" text-anchor="middle" fill="#fff">
+    <rect x="70" y="70" width="170" height="170" rx="44" fill="#FF5A5F"/>
+    <rect x="272" y="70" width="170" height="170" rx="44" fill="#2EA8FF"/>
+    <rect x="70" y="272" width="170" height="170" rx="44" fill="#3CC46B"/>
+    <rect x="272" y="272" width="170" height="170" rx="44" fill="#9B5CFF"/>
+  </g>
+  <g stroke="#fff" stroke-width="30" stroke-linecap="round" fill="#fff">
+    <path d="M155 115v80M115 155h80"/>
+    <path d="M317 155h80"/>
+    <path d="M125 327l60 60M185 327l-60 60"/>
+    <path d="M317 357h80" /><circle cx="357" cy="315" r="16" stroke="none"/><circle cx="357" cy="399" r="16" stroke="none"/>
+  </g>
+  <g transform="translate(256 256)">
+    <circle r="62" fill="#FFD23F" stroke="#fff" stroke-width="12"/>
+    <path fill="#fff" d="M0,-40 L11.8,-16.2 38,-12.4 19,6.2 23.5,32.4 0,20 -23.5,32.4 -19,6.2 -38,-12.4 -11.8,-16.2Z"/>
+  </g>
+</svg>
