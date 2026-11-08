@@ -225,6 +225,29 @@ table.mx td, table.mx th { text-align: center; }
 .tbar i.low { background: var(--warn); }
 .tr .tv, .tr .tt { font-variant-numeric: tabular-nums; }
 @media (max-width: 600px) { .mine .li { grid-template-columns: 2.4em minmax(0, 1fr); } .mine .li .aa, .mine .li .tt { grid-column: 2; text-align: left; } }
+.figsvg .dot { fill: var(--mark); }
+.figsvg .sh3ln { stroke: var(--sea-ink); stroke-width: 2.5; }
+.figsvg .dash2 { stroke-dasharray: 7 5; }
+.fbq { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: .9rem; color: var(--ink-2); margin-top: 4px; }
+.fbq.done { color: var(--board); font-weight: 700; }
+.btn.sm { padding: 8px 14px; font-size: .9rem; min-height: 40px; }
+.linkbtn { background: none; border: 0; padding: 6px 2px; color: var(--ink-2); text-decoration: underline; font: inherit; font-size: .9rem; cursor: pointer; }
+.fbbox { border: 1px solid var(--rule); border-radius: var(--r); padding: 14px 16px; background: var(--sheet); }
+.fbtext { display: grid; gap: 6px; font-size: .88rem; color: var(--ink-2); margin-top: 10px; }
+.fbtext textarea, .noteform textarea, .noteform select { width: 100%; box-sizing: border-box; font: inherit; font-size: 1rem; color: var(--ink); background: var(--paper); border: 1px solid var(--rule); border-radius: 10px; padding: 10px 12px; }
+.noteform { display: grid; grid-template-columns: 12em minmax(0, 1fr) auto; gap: 8px; align-items: start; }
+@media (max-width: 720px) { .noteform { grid-template-columns: 1fr; } }
+.ins { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; }
+.ins li.ng, .ins li.low { color: var(--mark); }
+.chk { display: flex; gap: 8px; align-items: center; font-size: .9rem; margin: 8px 0; }
+.filebtn { cursor: pointer; display: inline-flex; align-items: center; }
+.exportbox { width: 100%; box-sizing: border-box; font-family: ui-monospace, monospace; font-size: .8rem; margin-top: 10px; }
+.clog details { border-top: 1px solid var(--rule); padding: 10px 0; }
+.clog summary { cursor: pointer; display: flex; gap: 10px; flex-wrap: wrap; }
+.clog summary span { color: var(--ink-2); }
+.clog ul { margin: 8px 0 0; padding-left: 1.2em; }
+.foot { display: flex; justify-content: space-between; gap: 12px; padding: 24px 4px 8px; font-size: .8rem; color: var(--ink-2); }
+.foot a { color: var(--ink-2); }
 .figcap { font-size: .85rem; font-weight: 700; color: var(--ink-2); margin: 6px 0 2px; }
 .expr.grpd { font-size: 1.4rem; padding: 8px 0; }
 .grp { display: inline-block; border: 2px solid var(--mark); border-radius: 8px; padding: 0 6px; margin: 0 2px; }
@@ -371,6 +394,7 @@ details.sess .li { font-size: .92rem; }
 <body>
 <div id="app"></div>
 <script>
+const PAGE = 'child';
 // ===== 数の扱い (分数で厳密に計算する) =====
 const gcd = (a, b) => { a = Math.abs(a); b = Math.abs(b); while (b) { [a, b] = [b, a % b]; } return a || 1; };
 const lcm = (a, b) => a / gcd(a, b) * b;
@@ -959,10 +983,13 @@ const STAGES = {
   B3: { track: 'B', name: '速さ', types: ['speed'] },
   B4: { track: 'B', name: '単位量あたり', types: ['per_unit', 'per_total', 'compare'] },
   B5: { track: 'B', name: '単位も計算する (密度など)', types: ['unit_of', 'unit_check', 'density'] },
+  C1: { track: 'C', name: 'お金の計算 (おつり・消費税・割引き)', types: ['m_change', 'm_tax', 'm_discount'] },
+  C2: { track: 'C', name: 'ねだんの決まり方 (仕入れ・お得)', types: ['m_cost', 'm_value'] },
+  C3: { track: 'C', name: '通貨と利息 (為替・ためる)', types: ['m_fx', 'm_interest'] },
 };
 for (const st of Object.values(STAGES)) if (st.levels) st.types = [...new Set(Object.values(st.levels).flatMap((l) => l.types))];
 const LEVEL_RAMP = [1, 1, 2, 2, 3, 3, 4, 4, 5, 5]; // 10問の何問目がどのレベルか
-const TRACKS = { A: { name: '計算のしくみ', stages: ['A1', 'A2', 'A3', 'A4'] }, B: { name: '単位と速さ', stages: ['B1', 'B2', 'B3', 'B4', 'B5'] } };
+const TRACKS = { A: { name: '計算のしくみ', stages: ['A1', 'A2', 'A3', 'A4'] }, B: { name: '単位と速さ', stages: ['B1', 'B2', 'B3', 'B4', 'B5'] }, C: { name: 'お金とくらし', stages: ['C1', 'C2', 'C3'] } };
 const TYPE_NAMES = {
   int_add: '整数のたし算', int_sub: '整数のひき算', int_mul: '整数のかけ算', int_div: '整数のわり算', mental: '暗算のくふう',
   dec_add: '小数のたし算', dec_sub: '小数のひき算', dec_mul: '小数のかけ算', dec_div: '小数のわり算',
@@ -971,6 +998,7 @@ const TYPE_NAMES = {
   conv: '単位のかんさん', time_mix: '時間の組み合わせ', len_mix: '長さ・重さの組み合わせ', speed_conv: '速さの単位',
   speed: '速さの問題', per_unit: '1あたりを求める', per_total: '1あたりから求める', compare: 'くらべる',
   unit_of: '答えの単位', unit_check: '単位で式をたしかめる', density: '密度',
+  m_change: 'おつり', m_tax: '消費税', m_discount: '割引き', m_cost: 'ねだんの内わけ・仕入れ', m_value: 'お得をくらべる', m_fx: '為替 (円とドル)', m_interest: '利息',
 };
 const stageOfType = (t) => Object.keys(STAGES).find((s) => STAGES[s].types.includes(t));
 // あるステップ・レベルで出せる種類
@@ -2007,6 +2035,225 @@ function unitWhyFrames() {
   ];
 }
 
+// ===== お金とくらし =====
+// 制度や相場の数字は「例」。消費税は 2026年時点の制度 (標準 10%、食料品など 8%) を前提にしている。変わったら MONEY_FACTS を直す
+const MONEY_FACTS = { taxStd: 10, taxFood: 8, rates: { ドル: [140, 145, 150, 155, 160], ユーロ: [160, 165, 170] } };
+const yen = (n) => `${Fr.of(n).isInt() ? Fr.of(n).n.toLocaleString('ja-JP') : Fr.of(n).toDec()}円`;
+// 箱を矢印でつなぐ図: steps = [{s, sub, cls}]
+function figFlow(steps, o = {}) {
+  const W = o.W || 540, n = steps.length, gap = o.arrows ? 56 : 30, bw = (W - 20 - gap * (n - 1)) / n, y = 24, bh = o.h || 70;
+  let b = '';
+  steps.forEach((st, i) => {
+    const x = 10 + i * (bw + gap);
+    b += `<rect class="${st.cls || 'sh'}" x="${r1(x)}" y="${y}" width="${r1(bw)}" height="${bh}" rx="10"/>` + svgText(x + bw / 2, y + (st.sub ? 30 : bh / 2 + 6), st.s, 'b');
+    if (st.sub) String(st.sub).split('\n').forEach((line, k) => { b += svgText(x + bw / 2, y + 50 + k * 16, line, 's'); });
+    if (i < n - 1) { const xa = x + bw + 4, xb = x + bw + gap - 4, ym = y + bh / 2; b += `<path class="ac" d="M${r1(xa)} ${ym} L${r1(xb)} ${ym} m-7 -6 l7 6 l-7 6"/>`; if (o.arrows && o.arrows[i]) b += svgText((xa + xb) / 2, ym - 10, o.arrows[i], 's'); }
+  });
+  if (o.back) { const x1 = 10 + bw / 2, x2 = 10 + (n - 1) * (bw + gap) + bw / 2, yb = y + bh + 8; b += `<path class="ac" d="M${r1(x2)} ${yb} L${r1(x2)} ${yb + 18} L${r1(x1)} ${yb + 18} L${r1(x1)} ${yb} m-6 7 l6 -7 l6 7"/>` + svgText((x1 + x2) / 2, yb + 34, o.back, 's'); }
+  return svgBox(W, y + bh + (o.back ? 52 : 12), b, o.label || '流れの図');
+}
+// ほしい人と 売りたい量 (需要と供給) のグラフ。shift: 'demand' ならほしい人がふえた
+function figSupplyDemand(shift) {
+  const W = 540, x0 = 80, y0 = 20, w = 360, h = 200; let b = '';
+  b += `<line class="ln" x1="${x0}" y1="${y0}" x2="${x0}" y2="${y0 + h}"/><line class="ln" x1="${x0}" y1="${y0 + h}" x2="${x0 + w}" y2="${y0 + h}"/>`;
+  b += svgText(x0 - 8, y0 + 10, 'ねだん', 's', 'end') + svgText(x0 - 8, y0 + 26, '高い', 's', 'end') + svgText(x0 - 8, y0 + h - 4, '安い', 's', 'end') + svgText(x0 + w, y0 + h + 20, '数 (多い →)', 's', 'end');
+  b += `<line class="ac" x1="${x0 + 20}" y1="${y0 + 20}" x2="${x0 + w - 40}" y2="${y0 + h - 20}"/>` + svgText(x0 + 24, y0 + 16, 'ほしい人の数', 'm', 'start');
+  b += `<line class="sh3ln" x1="${x0 + 20}" y1="${y0 + h - 20}" x2="${x0 + w - 40}" y2="${y0 + 20}"/>` + svgText(x0 + w - 36, y0 + 16, '売りたい数', 'b', 'end');
+  const cx = x0 + (w - 20) / 2, cy = y0 + h / 2;
+  b += `<circle class="dot" cx="${cx}" cy="${cy}" r="6"/>` + svgText(cx - 14, cy + 5, 'ここで ねだんが決まる', 's', 'end');
+  if (shift === 'demand') { b += `<line class="ac dash2" x1="${x0 + 80}" y1="${y0 + 20}" x2="${x0 + w}" y2="${y0 + h - 20}"/>`; b += `<circle class="dot" cx="${cx + 30}" cy="${cy - 30}" r="6"/>` + svgText(cx + 40, cy - 36, 'ほしい人がふえると 高くなる', 'm', 'start'); }
+  return svgBox(W, y0 + h + 30, b, 'ほしい人の数と売りたい数の図');
+}
+GEN.m_change = () => {
+  const goods = [['ノート', 120, 180], ['えんぴつ', 60, 98], ['おにぎり', 110, 160], ['ジュース', 120, 150], ['パン', 130, 240], ['けしゴム', 80, 110], ['シール', 150, 300]];
+  const n = ri(2, 3); const its = shuffle(goods).slice(0, n).map(([g, a, z]) => [g, ri(a, z)]);
+  const tot = its.reduce((s, x) => s + x[1], 0); const pay = [500, 1000, 2000, 5000].find((p) => p >= tot + 1);
+  const ch = pay - tot;
+  const list = its.map(([g, p]) => `${g} ${p}円`).join('、');
+  const up = []; let cur = tot; // おつりを「たして数える」とび
+  const nx10 = Math.ceil(cur / 10) * 10; if (nx10 !== cur) { up.push({ a: cur, b: nx10, s: `+${nx10 - cur}` }); cur = nx10; }
+  const nx100 = Math.ceil(cur / 100) * 100; if (nx100 !== cur && nx100 <= pay) { up.push({ a: cur, b: nx100, s: `+${nx100 - cur}` }); cur = nx100; }
+  if (cur !== pay) up.push({ a: cur, b: pay, s: `+${pay - cur}` });
+  const tape = figTapes([{ s: 'はらった', segs: [{ w: pay, s: `${pay}円`, cls: 'sh3' }] }, { s: '内わけ', segs: [...its.map(([g, p]) => ({ w: p, s: p >= pay * 0.12 ? `${g}` : '' })), { w: ch, s: 'おつり', cls: 'sh2' }], braces: [{ from: 0, to: its.length - 1, s: `代金 ${tot}円`, side: 'bot' }] }], { label: 'はらったお金と代金・おつりのテープ図' });
+  return { html: `${list} を買って、${pay}円 はらいました。おつりは <b class="box">□</b> 円`, text: `${list} を ${pay}円で → おつり□円`, slots: [slot(ch, '円')],
+    explain: () => [
+      { fig: tape, text: `はらった ${pay}円 は、代金 と おつり に分かれます。だから おつり = はらったお金 − 代金。<br>まず代金: ${its.map((x) => x[1]).join(' + ')} = <b>${tot}円</b>` },
+      { fig: figNumberLine({ min: Math.floor(tot / 100) * 100, max: pay, marks: [{ v: tot, s: `${tot}` }, { v: pay, s: `${pay}` }, ...up.slice(0, -1).map((u) => ({ v: u.b, s: String(u.b) }))], jumps: up, label: '代金からはらったお金まで数える数直線' }),
+        text: `お店の人は、代金から はらったお金まで「たして」数えることがあります: ${up.map((u) => u.s.replace('+', '')).join(' + ')} = <b>${ch}円</b>。<br>ひき算 ${pay} − ${tot} = ${ch} と同じ答えになります。` },
+    ] };
+};
+GEN.m_tax = () => {
+  const food = rnd() < 0.5; const r = food ? MONEY_FACTS.taxFood : MONEY_FACTS.taxStd; const step = food ? 25 : 10;
+  const P = ri(4, 120) * step; const T = P * (100 + r) / 100; const what = food ? pick(['おべんとう', 'お米', 'くだもの', 'おかし']) : pick(['くつ', 'ぼうし', 'かさ', 'ゲーム', 'ふでばこ']);
+  const note = `<small>消費税は、多くの物は ${MONEY_FACTS.taxStd}%、食べ物 (店で食べる外食などはのぞく) は ${MONEY_FACTS.taxFood}% です (このアプリを作った時点のしくみ。かわることがあります)。</small>`;
+  const tape = (ask) => figTapes([{ s: '税こみ', segs: [{ w: 100, s: `税ぬき ${ask === 'P' ? '□' : P}円 (100%)` }, { w: r * 2.2, s: `税 ${r}%`, cls: 'sh2' }], total: ask === 'T' ? '□円' : `${T}円` }], { label: '税ぬきと消費税のテープ図' });
+  const dl = (ask) => figDoubleLine({ top: '金額 (円)', bot: '割合', cols: [{ pos: 0, t: '0', b: '0%' }, { pos: 100, t: String(P), b: '100%', ut: ask === 'P' }, { pos: 100 + r, t: String(T), b: `${100 + r}%`, ut: ask === 'T' }], arrows: [{ from: 100, to: 100 + r, s: ask === 'T' ? `×${1 + r / 100}` : `÷${1 + r / 100}`, side: 'bot' }], label: '金額と割合の二本の数直線' });
+  if (rnd() < 0.6) return { html: `税ぬき ${P}円 の${what}。消費税 ${r}% をたした ねだんは <b class="box">□</b> 円`, text: `税ぬき${P}円 + 消費税${r}% → □円`, slots: [slot(T, '円')],
+    explain: () => [
+      { fig: tape('T'), text: `税こみのねだん = 税ぬきのねだん (100%) + 消費税 (${r}%)。ぜんぶで <b>${100 + r}%</b> です。<br>${note}` },
+      { fig: dl('T'), text: `${100 + r}% は 小数で ${1 + r / 100}。だから ${P} × ${1 + r / 100} = <b>${T}円</b><br><small>べつの考え方: 税は ${P} × ${r / 100} = ${P * r / 100}円。${P} + ${P * r / 100} = ${T}円</small>` },
+      { fig: ueq([['単位の式', `${uqHTML(uq(P, '円'))}${uop('×')}${1 + r / 100}${uop('=')}${uqHTML(uq(T, '円'))}`, 'all']], '割合は 単位のない数'), text: `割合 (${1 + r / 100}) には単位がないので、円 × 割合 は 円 のままです。` },
+    ] };
+  return { html: `消費税 ${r}% をふくめて ${T}円 の${what}。税ぬきのねだんは <b class="box">□</b> 円`, text: `税こみ${T}円 (${r}%) → 税ぬき□円`, slots: [slot(P, '円')],
+    explain: () => [
+      { fig: tape('P'), text: `税こみの ${T}円 が ${100 + r}% にあたります。100% (税ぬき) を求めます。<br>${note}` },
+      { fig: dl('P'), text: `${100 + r}% → 100% にもどすので、${T} ÷ ${1 + r / 100} = <b>${P}円</b><br><small>よくあるまちがい: ${T} から ${r}% を ひく (${T} × ${1 - r / 100}) と、${T * (100 - r) / 100}円 になって合いません。もとにする量 (100%) が ちがうからです。</small>` },
+    ] };
+};
+GEN.m_discount = () => {
+  const v = ri(0, 1); const P = ri(6, 60) * 100;
+  if (v === 0) { const k = ri(1, 5); const S = P * (10 - k) / 10;
+    return { html: `定価 ${P}円 の品物が ${k}割引き。ねだんは <b class="box">□</b> 円`, text: `${P}円の${k}割引き → □円`, slots: [slot(S, '円')],
+      explain: () => [
+        { fig: figTapes([{ s: '定価', segs: Array.from({ length: 10 }, (_, i) => ({ w: 1, s: i < 10 - k ? '1割' : '1割', cls: i < 10 - k ? 'sh' : 'sh2' })), braces: [{ from: 10 - k, to: 9, s: `${k}割 ひく` }, { from: 0, to: 9 - k, s: `のこり ${10 - k}割`, side: 'bot' }] }], { label: '定価を10に分けたテープ図' }),
+          text: `1割 は 全体を 10こに分けた 1つ分 (0.1)。定価 ${P}円 の 1割は ${P / 10}円。<br>${k}割引き は、${k}割 をひいた のこり <b>${10 - k}割</b> をはらうことです。` },
+        { fig: ueq([['のこりで考える', `${P} × ${(10 - k) / 10} = <b>${S}</b>`], ['ひいて考える', `${P} − ${P} × ${k / 10} = ${P} − ${P * k / 10} = <b>${S}</b>`]], '2つの考え方'), text: `どちらでも ${S}円。のこりの割合 (${(10 - k) / 10}) をかけると 1回で計算できます。` },
+      ] }; }
+  const p = pick([10, 15, 20, 25, 30, 40]); const S = P * (100 - p) / 100;
+  return { html: `${P}円 の品物が ${p}%引き。ねだんは <b class="box">□</b> 円`, text: `${P}円の${p}%引き → □円`, slots: [slot(S, '円')],
+    explain: () => [
+      { fig: figDoubleLine({ top: '金額 (円)', bot: '割合', cols: [{ pos: 0, t: '0', b: '0%' }, { pos: 100 - p, t: String(S), b: `${100 - p}%`, ut: true }, { pos: 100, t: String(P), b: '100%' }], arrows: [{ from: 100, to: 100 - p, s: `×${(100 - p) / 100}`, side: 'bot' }], label: '割引きの二本の数直線' }),
+        text: `% (パーセント) は 100 をもとにした割合。${p}%引き なら、はらうのは <b>${100 - p}%</b> = ${(100 - p) / 100}。<br>${P} × ${(100 - p) / 100} = <b>${S}円</b>` },
+      { fig: figTable(['', '%', '小数', '割'], [['ひく分', `${p}%`, String(p / 100), `${p / 10}割`], ['はらう分', `${100 - p}%`, String((100 - p) / 100), `${(100 - p) / 10}割`], ['定価', '100%', '1', '10割']]),
+        text: `% と 小数 と 割 は、同じ割合の ちがう書き方です。${p}% = ${p / 100} = ${p / 10}割。` },
+    ] };
+};
+GEN.m_cost = () => {
+  if (rnd() < 0.5) {
+    const parts = [['材料', ri(3, 9) * 10], ['作る人の きゅうりょう', ri(2, 6) * 10], ['運ぶ・お店の 電気など', ri(1, 4) * 10], ['お店の もうけ', ri(1, 4) * 10]];
+    const what = pick(['パン 1こ', 'ケーキ 1こ', 'おべんとう 1こ', 'ノート 1さつ']); const P = parts.reduce((s, x) => s + x[1], 0);
+    return { html: `${what} のねだんの 内わけ (例): ${parts.map(([a, b]) => `${a} ${b}円`).join('、')}。税ぬきのねだんは <b class="box">□</b> 円`, text: `${what}の内わけ → □円`, slots: [slot(P, '円')],
+      explain: () => [{ fig: figTapes([{ s: 'ねだん', segs: parts.map(([a, b], i) => ({ w: b, s: b >= 20 ? a.split(' ')[0] : '', cls: ['sh', 'sh3', 'sh', 'sh2'][i] })), total: `${P}円` }], { label: 'ねだんの内わけのテープ図' }) + figTable(['', '円'], parts.map(([a, b]) => [a, b]).concat([['合計 (ねだん)', `<b>${P}</b>`]]), { sumRow: parts.length }),
+        text: `ねだんには、材料だけでなく、作る人の きゅうりょう、運ぶお金、お店をひらくお金、そして もうけ が入っています。ぜんぶたすと <b>${P}円</b>。<br><small>数字は説明のための例です。</small>`, lesson: 'price' }] };
+  }
+  const C = ri(4, 30) * 20; const r = pick([20, 25, 30, 40, 50]); const P = C * (100 + r) / 100;
+  return { html: `${C}円 で仕入れた品物に、仕入れねの ${r}% のもうけをのせて 定価をつけます。定価は <b class="box">□</b> 円`, text: `仕入れ${C}円 + もうけ${r}% → 定価□円`, slots: [slot(P, '円')],
+    explain: () => [
+      { fig: figTapes([{ s: '定価', segs: [{ w: 100, s: `仕入れね ${C}円 (100%)` }, { w: r, s: `もうけ ${r}%`, cls: 'sh2' }], total: '□円' }], { label: '仕入れねともうけのテープ図' }),
+        text: `お店は 品物を ${C}円 で仕入れて (買って)、それより高く売って もうけを出します。もとにするのは 仕入れね (100%)。定価は ${100 + r}% にあたります。`, lesson: 'price' },
+      { fig: figDoubleLine({ top: '金額 (円)', bot: '割合', cols: [{ pos: 0, t: '0', b: '0%' }, { pos: 100, t: String(C), b: '100%' }, { pos: 100 + r, t: String(P), b: `${100 + r}%`, ut: true }], arrows: [{ from: 100, to: 100 + r, s: `×${(100 + r) / 100}`, side: 'bot' }], label: '仕入れねと定価の二本の数直線' }),
+        text: `${C} × ${(100 + r) / 100} = <b>${P}円</b>。もうけは ${P} − ${C} = ${P - C}円 です。` },
+    ] };
+};
+GEN.m_value = () => {
+  if (rnd() < 0.5) {
+    let a, b, pa, pb, ua, ub;
+    do { a = pick([200, 300, 400, 500]); b = pick([300, 500, 600, 800, 1000]); ua = ri(10, 30) * 10; ub = ri(10, 30) * 10; pa = a / 100 * ua; pb = b / 100 * ub; } while (a === b || ua === ub || !Number.isInteger(pa) || !Number.isInteger(pb));
+    const what = pick(['お米', 'ぶた肉', 'コーヒー豆', 'チーズ']); const ans = ua < ub ? 'A' : 'B';
+    return { html: `${what} A: ${a} g で ${pa}円<br>${what} B: ${b} g で ${pb}円`, text: `A:${a}g${pa}円 / B:${b}g${pb}円`, lead: '100 g あたりが安いのはどっち？', choices: [{ id: 'A', html: 'A' }, { id: 'B', html: 'B' }], answerChoice: ans, slots: [],
+      explain: () => [
+        { fig: figTable(['', '重さ', '代金', '100 g あたり'], [['A', `${a} g`, `${pa}円`, `<b>${ua}円</b>`], ['B', `${b} g`, `${pb}円`, `<b>${ub}円</b>`]]) + figBars([{ s: 'A', v: ua, label: String(ua) }, { s: 'B', v: ub, label: String(ub), cls: 'sh3' }], ' 円/100g'),
+          text: `量がちがうと、代金だけでは くらべられません。「100 g あたり」に そろえます。<br>A: ${pa} ÷ ${a / 100} = ${ua}円、B: ${pb} ÷ ${b / 100} = ${ub}円。安いのは <b>${ans}</b>。` },
+        { fig: ueq([['A', `${uqHTML(uq(pa, '円'))}${uop('÷')}${uqHTML(uq(a, 'g'))}${uop('=')}${uqHTML(uq(ua, '円', 100, 'g'))}`, 'all'], ['B', `${uqHTML(uq(pb, '円'))}${uop('÷')}${uqHTML(uq(b, 'g'))}${uop('=')}${uqHTML(uq(ub, '円', 100, 'g'))}`, 'all']], 'どちらも 円/100g にそろえる'),
+          text: `単位を そろえると くらべられます。円 ÷ g で「1 g あたり」、それを 100倍して「100 g あたり」(円/100g) にしました。`, lesson: 'price' },
+      ] };
+  }
+  const one = ri(10, 25) * 10; const k = pick([3, 4, 5, 6]); const pack = one * k - ri(1, 4) * 10 * (k - 1); const save = one * k - pack;
+  return { html: `1こ ${one}円 のヨーグルト。${k}こパックは ${pack}円 です。${k}こ ほしいとき、パックのほうが <b class="box">□</b> 円 安い`, text: `1こ${one}円 / ${k}こ${pack}円 → □円安い`, slots: [slot(save, '円')],
+    explain: () => [
+      { fig: figTapes([{ s: 'ばらで', segs: Array.from({ length: k }, () => ({ w: one, s: String(one) })), total: `${one * k}円` }, { s: 'パック', segs: [{ w: pack, s: `${pack}`, cls: 'sh3' }, { w: save, s: '', cls: 'cut' }], total: `${pack}円` }], { label: 'ばら買いとパックのテープ図' }),
+        text: `ばらで ${k}こ: ${one} × ${k} = ${one * k}円。パック: ${pack}円。<br>${one * k} − ${pack} = <b>${save}円</b> 安くなります。1こあたりでは ${pack} ÷ ${k} = ${new Fr(pack, k).terminating() ? new Fr(pack, k).toDec() : '約' + Math.round(pack / k)}円 です。<br><small>まとめて売ると、お店は 運ぶ手間や包む手間が へるので、安くできることがあります。ただし、食べきれないと 安く買っても むだになります。</small>`, lesson: 'price' },
+    ] };
+};
+GEN.m_fx = () => {
+  const v = ri(0, 2); const cur = rnd() < 0.75 ? 'ドル' : 'ユーロ'; const R = pick(MONEY_FACTS.rates[cur]); const sym = cur === 'ドル' ? '$' : '€';
+  const note = `<small>1${cur} が何円かを「為替レート」といいます。ほんとうのレートは毎日かわるので、ここの数字は例です。</small>`;
+  if (v === 0) { const X = ri(2, 40) * 5; const Y = X * R;
+    return { html: `1${cur} = ${R}円 のとき、${X}${cur} (${sym}${X}) は <b class="box">□</b> 円`, text: `1${cur}=${R}円で ${X}${cur} → □円`, slots: [slot(Y, '円')],
+      explain: () => [
+        { fig: rateFig('円', cur, [{ pos: 1, t: String(R), b: '1' }, { pos: X, t: Y.toLocaleString('ja-JP'), b: String(X), ut: true }]), text: `1${cur} が ${R}円。${X}${cur} は その ${X}こ分なので、${R} × ${X} = <b>${Y.toLocaleString('ja-JP')}円</b><br>${note}`, lesson: 'currency' },
+        { fig: ueq([['単位の式', `${mulChain([uq(X, cur), uq(R, '円', 1, cur)])}${uop('=')}${uqHTML(uq(Y, '円'))}`, 'all']], '単位で たしかめる'), text: `レートは「1${cur} あたり何円」という 1あたりの量 (円/${cur})。${cur} が消えて 円 がのこります。` },
+      ] }; }
+  if (v === 1) { const X = ri(2, 40) * 5; const Y = X * R;
+    return { html: `1${cur} = ${R}円 のとき、${Y.toLocaleString('ja-JP')}円 を ${cur} にかえると <b class="box">□</b> ${cur}`, text: `1${cur}=${R}円で ${Y}円 → □${cur}`, slots: [slot(X, cur)],
+      explain: () => [
+        { fig: rateFig('円', cur, [{ pos: 1, t: String(R), b: '1' }, { pos: X, t: Y.toLocaleString('ja-JP'), b: String(X), ub: true }]), text: `${R}円 で 1${cur}。${Y.toLocaleString('ja-JP')}円 の中に ${R}円 が いくつあるか: ${Y} ÷ ${R} = <b>${X}${cur}</b><br>${note}`, lesson: 'currency' },
+        { fig: ueq([['単位の式', `${uqHTML(uq(Y, '円'))}${uop('÷')}${uqHTML(uq(R, '円', 1, cur))}${uop('=')}${mulChain([uq(Y, '円'), uq(1, cur, R, '円')])}${uop('=')}${uqHTML(uq(X, cur))}`, 'all']], '単位で たしかめる'), text: `円/${cur} でわるのは、${cur}/円 をかけるのと同じ。円 が消えて ${cur} がのこります。` },
+      ] }; }
+  const a = pick([150, 145, 140]); const d = pick([10, 20, 30]); const up = rnd() < 0.5; const b = up ? a + d : a - d; const ans = up ? 'yasu' : 'taka';
+  return { html: `1ドル = ${a}円 だったのが、1ドル = ${b}円 になりました。`, text: `1ドル${a}円 → ${b}円`, lead: 'これは 円高？ 円安？', choices: [{ id: 'taka', html: '円高' }, { id: 'yasu', html: '円安' }], answerChoice: ans, slots: [],
+    explain: () => [
+      { fig: figTapes([{ s: `前 (1ドル)`, segs: [{ w: a, s: `${a}円` }] }, { s: `今 (1ドル)`, segs: [{ w: b, s: `${b}円`, cls: up ? 'sh2' : 'sh3' }] }], { label: '1ドルを買うのに必要な円のテープ図' }),
+        text: `同じ 1ドル を手に入れるのに、前は ${a}円、今は ${b}円 必要です。<br>${up ? `前より 多くの円 が必要 → 円の 力 (ねうち) が 下がった → <b>円安</b>` : `前より 少ない円 ですむ → 円の 力 (ねうち) が 上がった → <b>円高</b>`}。<br><small>数字 (${a} → ${b}) が ${up ? '大きく' : '小さく'}なったのに「円${up ? '安' : '高'}」なので、まちがえやすいところです。</small>`, lesson: 'currency' },
+      { fig: figTable(['', '円高 (1ドル が 少ない円で買える)', '円安 (1ドル に 多くの円がいる)'], [['外国へ旅行', 'とくになりやすい', 'そんになりやすい'], ['外国から買う物 (輸入)', '安くなりやすい', '高くなりやすい'], ['外国へ売る会社 (輸出)', 'もうけが へりやすい', 'もうけが ふえやすい']]),
+        text: '円高・円安は、どちらが よい・わるい ではなく、立場によって とく・そん が ちがいます。' },
+    ] };
+};
+GEN.m_interest = () => {
+  const P = pick([10000, 20000, 50000, 100000]); const r = pick([1, 2, 3, 5]);
+  if (rnd() < 0.6) { const n = ri(1, 3); const I = P * r / 100 * n;
+    return { html: `${P.toLocaleString('ja-JP')}円 を、1年に ${r}% の利息がつく 銀行に あずけます。${n}年 で つく利息は <b class="box">□</b> 円 (毎年 はじめの ${P.toLocaleString('ja-JP')}円 にだけ 利息がつくとします)`, text: `${P}円 年${r}% ${n}年 (単利) → 利息□円`, slots: [slot(I, '円')],
+      explain: () => [
+        { fig: figFlow([{ s: 'あずける人', sub: `${P.toLocaleString('ja-JP')}円\nあずける` }, { s: '銀行', sub: 'お金を\nかしだす', cls: 'sh3' }, { s: 'かりる人・会社', sub: '利息をつけて\nかえす' }], { arrows: ['あずける', 'かす'], back: '利息の一部が、あずけた人にも わたる', label: '銀行のお金の流れ' }),
+          text: '銀行は、あずかったお金を 家や会社に かして、利息をつけて かえしてもらいます。その利息の一部が、あずけた人への 利息になります。', lesson: 'savings' },
+        { fig: figTapes(Array.from({ length: n }, (_, i) => ({ s: `${i + 1}年目`, segs: [{ w: 100, s: `${P.toLocaleString('ja-JP')}円` }, { w: r * 6, s: `+${(P * r / 100).toLocaleString('ja-JP')}`, cls: 'sh2' }] })), { label: '毎年の利息のテープ図' }),
+          text: `1年の利息は ${P.toLocaleString('ja-JP')} × ${r / 100} = ${(P * r / 100).toLocaleString('ja-JP')}円。${n}年 なら × ${n} で <b>${I.toLocaleString('ja-JP')}円</b>。<br><small>本当の 預金の利息は、税金が ひかれたり、利率が もっと低かったりします。数字は例です。</small>` },
+      ] }; }
+  const r2 = pick([5, 10]); const A1 = P * (100 + r2) / 100, A2 = A1 * (100 + r2) / 100;
+  return { html: `${P.toLocaleString('ja-JP')}円 を 1年に ${r2}% ふえる方法で 2年 おきます。1年目の利息にも 次の年は 利息がつきます。2年後は <b class="box">□</b> 円`, text: `${P}円 年${r2}% 2年 (複利) → □円`, slots: [slot(A2, '円')],
+    explain: () => [
+      { fig: figTapes([{ s: 'はじめ', segs: [{ w: P, s: P.toLocaleString('ja-JP') }] }, { s: '1年後', segs: [{ w: P, s: P.toLocaleString('ja-JP') }, { w: A1 - P, s: `+${(A1 - P).toLocaleString('ja-JP')}`, cls: 'sh2' }] }, { s: '2年後', segs: [{ w: A1, s: A1.toLocaleString('ja-JP') }, { w: A2 - A1, s: `+${(A2 - A1).toLocaleString('ja-JP')}`, cls: 'sh2' }] }], { label: '利息に利息がつくテープ図' }),
+        text: `1年後: ${P.toLocaleString('ja-JP')} × ${1 + r2 / 100} = ${A1.toLocaleString('ja-JP')}円。<br>2年後は この ${A1.toLocaleString('ja-JP')}円 全体が もとになる: × ${1 + r2 / 100} = <b>${A2.toLocaleString('ja-JP')}円</b>。<br>2年目の利息 (${(A2 - A1).toLocaleString('ja-JP')}円) が 1年目 (${(A1 - P).toLocaleString('ja-JP')}円) より多いのは、利息にも利息がつくからです (複利)。<br><small>お金を かりるときも 同じしくみで、返すのがおくれるほど 利息がふえます。</small>`, lesson: 'savings' },
+    ] };
+};
+function moneyWhatFrames() {
+  return [
+    { fig: figTable(['持っている物', 'ほしい物'], [['さかな', 'パン'], ['パン', 'くつ'], ['くつ', 'さかな']]),
+      text: '<b>お金がなかったら？</b><br>むかしは 物と物を とりかえる「物々交換」をしていました。でも、さかなを持っている人が パンをほしくても、パン屋さんが ほしいのは くつ…。<br>おたがいに ほしい物が ぴったり合う相手を さがすのは、とても たいへんです。' },
+    { fig: figFlow([{ s: 'さかな', sub: '売る' }, { s: 'お金', cls: 'sh3' }, { s: 'パン', sub: '買う' }], { arrows: ['→', '→'], label: 'お金をなかだちにする交換' }),
+      text: '<b>お金が「なかだち」をする</b><br>さかなを いったん お金にかえておけば、そのお金で だれからでも パンが買えます。お金は、だれとでも 交換できる 道具です。' },
+    { fig: figFlow([{ s: '交換する', sub: '物やサービスと\nとりかえる' }, { s: 'ねうちを はかる', sub: 'ねだんで\nくらべられる', cls: 'sh3' }, { s: 'ためておく', sub: 'くさらずに\nとっておける', cls: 'sh2' }], { label: 'お金の3つのやくわり' }),
+      text: '<b>お金の 3つのやくわり</b><br>① 交換する: 物やサービスと とりかえる。<br>② ねうちを はかる: 「120円」のように、ちがう物どうしの ねうちを 同じものさしで くらべられる (単位の「円」と同じ考え方です)。<br>③ ためておく: さかなは くさるけれど、お金は とっておいて あとで使えます。' },
+    { fig: figTable(['', 'つくるところ', 'れい'], [['お札 (紙へい)', '日本銀行が発行', '1万円・5千円・千円 など'], ['こうか (コイン)', '国 (政府) が発行', '500円・100円・10円 など'], ['電子マネー・カード', 'お金のデータを やりとり', 'ICカード・スマホ']]),
+      text: '<b>お金の いろいろな形</b><br>日本のお札は 日本銀行、コインは 国が発行しています。お札の紙そのものの ねうちは 小さいのに 1万円として使えるのは、「みんなが 1万円として うけとる」と 信じているから (信用) です。<br>電子マネーは、目に見えなくても 同じ「円」のデータを やりとりしています。' },
+    { fig: figFlow([{ s: '家', sub: 'はたらいて\nきゅうりょう' }, { s: 'お店・会社', sub: '物を売って\nもうける', cls: 'sh3' }, { s: '国・市', sub: '税金で 学校や\n道路をつくる', cls: 'sh2' }], { arrows: ['買い物', '税金'], back: 'お金は ぐるぐる めぐっている', label: 'お金のめぐり' }),
+      text: '<b>お金は めぐっている</b><br>家の人は はたらいて きゅうりょうをもらい、買い物をします。お店や会社は そのお金で きゅうりょうを はらいます。消費税などの 税金は、学校・道路・病院など みんなのために使われます。' },
+  ];
+}
+function priceFrames() {
+  const parts = [['材料', 60, 'sh'], ['作る人の きゅうりょう', 50, 'sh3'], ['運ぶ・店の電気', 30, 'sh'], ['お店の もうけ', 40, 'sh2'], ['消費税', 18, 'cut']];
+  return [
+    { fig: figTapes([{ s: 'パン1こ', segs: parts.map(([a, w, c]) => ({ w, s: a.split(' ')[0].replace('作る人の', '人'), cls: c })), total: '198円' }], { label: 'パンのねだんの内わけ' }) + figTable(['', '円 (例)'], parts.map(([a, w]) => [a, w]).concat([['ねだん', '<b>198</b>']]), { sumRow: parts.length }),
+      text: '<b>ねだんの 中身</b><br>パン 1こ のねだんには、材料だけでなく、作る人の きゅうりょう、運ぶお金、お店の電気代、お店の もうけ、そして 消費税が 入っています (数字は例)。<br>どれかが 高くなると、ねだんも 上がりやすくなります。' },
+    { fig: figSupplyDemand(),
+      text: '<b>ほしい人の数 と 売りたい数</b><br>ねだんが 安いほど ほしい人は ふえ、高いほど 売りたい人 (作りたい人) は ふえます。<br>この 2つが ちょうど つりあうところで、ねだんが 決まりやすくなります。これを「需要 (ほしい) と 供給 (売りたい)」といいます。' },
+    { fig: figSupplyDemand('demand'),
+      text: '<b>ほしい人が ふえると</b><br>暑い日の アイス、雨の日の かさ のように、ほしい人が 急に ふえると、ねだんは 上がりやすくなります。<br>反対に、野菜が たくさん とれた年 (売りたい数が ふえた) は、ねだんが 下がりやすくなります。' },
+    { fig: figTable(['同じ物でも…', 'ねうちが 高く感じる', 'ねうちが 低く感じる'], [['水 1本', 'のどが からから、山の上', '家に水道がある'], ['かさ', '急な 大雨', '晴れの日'], ['マンガ', '読みたかった 新刊', 'もう持っている']]),
+      text: '<b>ねうちは 人や場面で かわる</b><br>同じ物でも、だれが・いつ・どこで 使うかで、ねうち (どれだけ ほしいか) は かわります。<br>だから 買う前に「わたしにとって このねだんの ねうちがあるか」を 考えることが 大切です。' },
+    { fig: figTable(['くらべ方', '何に そろえる', 'れい'], [['1あたりの ねだん', '100 g・1こ・1 m', '円/100g'], ['まとめ買い', '使う数', '食べきれる？'], ['割引き・ポイント', 'はらう金額', '何% 引き？']]),
+      text: '<b>まとめ: かしこい 買い物</b><br>・ねだんの中身 (材料・人・運ぶ・もうけ・税) を 知る。<br>・ねだんは ほしい人と 売りたい数の つりあいで かわる。<br>・くらべるときは「1あたり」に そろえる (単位も計算する)。<br>・安さだけでなく、ほんとうに 使うかどうかも 考える。' },
+  ];
+}
+function currencyFrames() {
+  return [
+    { fig: figTable(['国・地いき', '通貨', 'きごう'], [['日本', '円', '¥'], ['アメリカ', 'ドル', '$'], ['ヨーロッパの 多くの国', 'ユーロ', '€'], ['イギリス', 'ポンド', '£'], ['中国', '元 (人民元)', '¥ (元)'], ['韓国', 'ウォン', '₩']]),
+      text: '<b>国ごとに ちがう お金 (通貨)</b><br>日本は 円、アメリカは ドル のように、国や地いきごとに 使うお金が ちがいます。<br>外国で 買い物をするときは、円を その国の お金に とりかえます (両替)。' },
+    { fig: rateFig('円', 'ドル', [{ pos: 1, t: '150', b: '1' }, { pos: 10, t: '1500', b: '10' }]),
+      text: '<b>為替レート = 1ドル あたり 何円</b><br>「1ドル = 150円」なら、10ドル は 1500円 です。レートは「1あたりの量」(円/ドル) なので、速さや 密度と 同じように 二本の数直線で 考えられます。<br>レートは 毎日 少しずつ かわります (ここの数字は例です)。' },
+    { fig: figTapes([{ s: '1ドル = 150円', segs: [{ w: 150, s: '150円' }] }, { s: '1ドル = 120円', segs: [{ w: 120, s: '120円', cls: 'sh3' }], total: '円高' }, { s: '1ドル = 180円', segs: [{ w: 180, s: '180円', cls: 'sh2' }], total: '円安' }], { label: '1ドルに必要な円のテープ図' }),
+      text: '<b>円高 と 円安</b><br>1ドル を手に入れるのに 必要な円が 少なくなる (150円 → 120円) のが <b>円高</b>: 円の ねうちが 上がった。<br>多く必要になる (150円 → 180円) のが <b>円安</b>: 円の ねうちが 下がった。<br>数字が 小さくなるのに「高」なので、「円の 力が 強くなった」と 考えると わかりやすいです。' },
+    { fig: figTable(['', '円高', '円安'], [['外国旅行', 'とく', 'そん'], ['輸入 (外国から買う)', '安くなりやすい', '高くなりやすい'], ['輸出 (外国へ売る)', 'もうけが へりやすい', 'もうけが ふえやすい']]),
+      text: '<b>だれが とく？ そん？</b><br>円高・円安は、どちらが よい とは決まっていません。旅行する人、外国から物を買う会社、外国へ物を売る会社で、とく・そんが 反対になります。' },
+    { fig: ueq([['円 → ドル', `${uqHTML(uq(3000, '円'))}${uop('÷')}${uqHTML(uq(150, '円', 1, 'ドル'))}${uop('=')}${uqHTML(uq(20, 'ドル'))}`, 'all'], ['ドル → 円', `${mulChain([uq(20, 'ドル'), uq(150, '円', 1, 'ドル')])}${uop('=')}${uqHTML(uq(3000, '円'))}`, 'all']], '単位の式で 両替'),
+      text: '<b>まとめ: 両替も 単位の計算</b><br>ドル → 円 は レート (円/ドル) を かける、円 → ドル は レートで わる。どちらにするか まよったら、単位が 消えて ほしい通貨が のこるかを たしかめましょう。' },
+  ];
+}
+function savingsFrames() {
+  return [
+    { fig: figFlow([{ s: 'あずける人', sub: 'お金を\nあずける' }, { s: '銀行', sub: 'お金を\nかす', cls: 'sh3' }, { s: 'かりる人・会社', sub: '利息をつけて\nかえす' }], { arrows: ['あずける', 'かす'], back: '利息の一部が あずけた人へ', label: '銀行のしくみ' }),
+      text: '<b>銀行の しくみ</b><br>銀行は、みんなから あずかったお金を、家を買う人や 会社に かします。かりた人は「かりたお礼」として 利息をつけて かえします。その一部が、あずけた人への 利息になります。' },
+    { fig: figTapes([0, 1, 2, 3].map((y) => ({ s: `${y}年後`, segs: [{ w: 100, s: '10000' }, ...(y ? [{ w: 10 * y, s: `+${500 * y}`, cls: 'sh2' }] : [])] })), { label: '毎年同じだけ利息がつくテープ図' }),
+      text: '<b>利息の計算 (単利)</b><br>10000円 を 1年に 5% で あずけると、1年の利息は 10000 × 0.05 = 500円。毎年 はじめの 10000円 にだけ 利息がつくなら、3年で 500 × 3 = 1500円。<br><small>本当の預金の利率は もっと低いことが多く、税金も ひかれます。数字は 計算しやすい例です。</small>' },
+    { fig: figTapes([{ s: 'はじめ', segs: [{ w: 100, s: '10000' }] }, { s: '1年後', segs: [{ w: 100, s: '10000' }, { w: 10, s: '+1000', cls: 'sh2' }] }, { s: '2年後', segs: [{ w: 110, s: '11000' }, { w: 11, s: '+1100', cls: 'sh2' }] }, { s: '3年後', segs: [{ w: 121, s: '12100' }, { w: 12.1, s: '+1210', cls: 'sh2' }] }], { label: '利息に利息がつくテープ図' }),
+      text: '<b>利息にも 利息がつく (複利)</b><br>1年に 10% ふえると、1年後 11000円。次の年は 11000円 全体が もとになるので 利息は 1100円、その次は 1210円…。<br>ふえ方が だんだん 大きくなります。長い間 ためるほど ちがいが 大きくなります。' },
+    { fig: figTable(['', 'ためる (あずける)', 'かりる (ローン・あとばらい)'], [['利息', 'もらう', 'はらう'], ['長くなると', 'ふえる', 'はらう分が ふえる'], ['気をつけること', 'すぐ使えない お金もある', '返す計画を 先に立てる']]),
+      text: '<b>かりるときは 反対</b><br>お金を かりると、利息を はらいます。返すのが おそいほど、はらう利息は ふえます。<br>カードの「あとばらい」や 分割ばらいも、手数料 (利息のようなもの) が つくことがあります。' },
+    { fig: figFlow([{ s: 'もらう', sub: 'おこづかい\nお年玉' }, { s: 'わける', sub: 'つかう・ためる\n(だれかのために)', cls: 'sh3' }, { s: 'ふりかえる', sub: 'おこづかい帳\nで計算', cls: 'sh2' }], { label: 'お金の使い方のサイクル' }),
+      text: '<b>まとめ: 自分のお金を どう使う？</b><br>もらったお金を「今つかう」「ためて あとで使う」に 分けて、おこづかい帳で 計算してみましょう。<br>パーセントや 利息の計算は、大人になって 貯金や ローンを えらぶときに そのまま 役立ちます。' },
+  ];
+}
+
 function figTapes(rows, o = {}) {
   const W = 540, x0 = 104, TW = 400;
   const max = o.max || Math.max(...rows.map((r) => r.segs.reduce((a, s) => a + s.w, 0)));
@@ -2073,6 +2320,10 @@ function orderWhyFrames() {
 const LESSONS = {
   order: { title: '計算の順番のわけ', frames: orderWhyFrames, stage: 'A4', btn: 'なぜこの順番？ くわしく見る' },
   unit: { title: '単位も計算する', frames: unitWhyFrames, stage: 'B5', btn: '単位の計算を くわしく見る' },
+  money: { title: 'お金ってなに？', frames: moneyWhatFrames, stage: 'C1', btn: 'お金のしくみを見る' },
+  price: { title: 'ねだんは どう決まる？', frames: priceFrames, stage: 'C2', btn: 'ねだんの決まり方を くわしく見る' },
+  currency: { title: '通貨と為替 (円高・円安)', frames: currencyFrames, stage: 'C3', btn: '通貨と為替を くわしく見る' },
+  savings: { title: 'ためる・かりる (利息)', frames: savingsFrames, stage: 'C3', btn: '利息のしくみを くわしく見る' },
 };
 
 function makeProblem(type, level) {
@@ -2087,6 +2338,25 @@ function makeProblem(type, level) {
 }
 
 if (typeof module !== 'undefined') module.exports = { Fr, GEN, makeProblem, LESSONS, STAGES, TRACKS, LEVEL_RAMP, levelTypes, judgeSlot, parseAnswer, addSubFrames, mulFrames, divFrames, exprSteps, gridHTML, setRnd: (f) => { rnd = f; } };
+// 改善の記録 (新しい順)。from には きっかけ (保護者の指示・送られたまとめの番号 FB-…) を書く
+const CHANGELOG = [
+  { v: '1.8', date: '2026-11-08', title: 'フィードバックの仕組み・ページ分け・お金とくらし', from: ['保護者の指示 (11/8)'], items: [
+    '娘さん用ページ (index.html) と 保護者用ページ (parent.html) を分けた',
+    'アプリ内の声: 説明ごとの「わかった/わからない」、答えたあとの「この問題について おしえて」、練習の感想とひとこと、おねがい・アイデア',
+    '記録をファイルにして 保護者の端末へ わたす (AirDrop・メッセージ)。保護者ページで読みこむ',
+    '保護者ページ: 自動で見つけたこと、保護者のメモ、「Claude に送る」まとめ (番号つき)、改善の記録',
+    '新しいトラック C「お金とくらし」: おつり・消費税・割引き・ねだんの内わけ・お得・為替・利息と、読みもの4つ',
+  ] },
+  { v: '1.7', date: '2026-10-21', title: 'じぶんの記録', from: ['保護者の指示 (10/21)'], items: ['解いている間は時間をかくす', '娘さん用「じぶんの記録」: ランク・つぎのめあて・攻略マップ・のびたところ・種類ごとのできぐあい'] },
+  { v: '1.6', date: '2026-10-21', title: '時間の計測とゲーム要素', from: ['保護者の指示 (10/21)'], items: ['1問ごと・合計の時間を自動で計測', '点数・れんぞく正解・自己ベスト・見直しボーナス、メダル、記録更新、リベンジ'] },
+  { v: '1.5', date: '2026-10-20', title: '単位も計算する', from: ['保護者の指示 (10/20)'], items: ['単位を式に入れる解説 (数・単位・あわせて)', '1あたりの箱の図', 'B5 (答えの単位・式えらび・密度) と読みもの「単位も計算する」'] },
+  { v: '1.4', date: '2026-10-20', title: '計算の順番のわけ', from: ['保護者の指示 (10/20)'], items: ['読みもの「計算の順番のわけ」(テープ図・段の図)'] },
+  { v: '1.3', date: '2026-10-20', title: '計算の意味から説明', from: ['保護者の指示 (10/20)'], items: ['たし算・ひき算・かけ算・わり算を 位のタイル図で 意味から説明'] },
+  { v: '1.2', date: '2026-10-18', title: '順不同で選べる・すべてに図', from: ['保護者の指示 (10/18)'], items: ['レベル解放をやめ、すきな順に選べる', 'すべての説明に 図・表・数直線'] },
+  { v: '1.1', date: '2026-10-18', title: '段階的なむずかしさ', from: ['保護者の指示 (10/18)'], items: ['整数・小数をレベル1〜5に', '位ごとの具体的な解説'] },
+  { v: '1.0', date: '2026-10-18', title: 'はじめての版', from: ['シナリオ v1.0'], items: ['A (計算) と B (単位・速さ・単位量あたり)'] },
+];
+const APP_VERSION = `v${CHANGELOG[0].v}`;
 </script>
 <script>
 // ===== 保存 =====
@@ -2115,7 +2385,7 @@ function nextMedalText(items) {
 function allCourses() { const ks = []; for (const st of Object.keys(STAGES)) { ks.push(st); if (STAGES[st].levels) Object.keys(STAGES[st].levels).forEach((n) => ks.push(`${st}:${n}`)); } return ks; }
 const elapsed = () => (sess.hiddenAt ? sess.hiddenAt : Date.now()) - sess.t0;
 function freshState() {
-  return { v: 2, updatedAt: 0, unlocked: { A1: true, B1: true }, best: {}, mistakes: {}, typeStats: {}, fastest: {}, sessions: [] };
+  return { v: 2, updatedAt: 0, unlocked: { A1: true, B1: true }, best: {}, mistakes: {}, typeStats: {}, fastest: {}, sessions: [], feedback: [] };
 }
 // v1 (A1=整数・小数, A2=分数, A3=まぜた計算) → v2 (A1=整数, A2=小数, A3=分数, A4=まぜた計算)
 function migrate(s) {
@@ -2137,7 +2407,10 @@ function loadLocal() {
   try { const s = migrate(JSON.parse(localStorage.getItem(LS_KEY))); if (s) return Object.assign(freshState(), s); } catch (e) { /* 読めないときは新しく始める */ }
   return freshState();
 }
+// 保護者ページは 記録を読むだけ (リセットのときだけ書く)
+let allowWrite = PAGE !== 'parent';
 function saveLocal() {
+  if (!allowWrite) return;
   try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { /* 保存できない環境 */ }
 }
 let state = loadLocal();
@@ -2209,7 +2482,7 @@ function planSession(mode, fixedLv) {
 }
 
 // ===== 練習の状態 =====
-let view = 'home';
+let view = PAGE === 'parent' ? 'parent' : 'home';
 let sess = null; // {id, mode, plan:[{type, extra}], idx, items:[], startedAt, problem, inputs, active, phase, t0, sideTab, frame, hint}
 function startSession(mode, fixedLv, plan) {
   fixedLv = fixedLv ? +fixedLv : null;
@@ -2334,7 +2607,15 @@ const app = () => document.getElementById('app');
 
 function header() {
   const tab = (id, label) => `<button data-act="tab" data-v="${id}" aria-pressed="${(view === id || (id === 'home' && ['practice', 'result', 'lesson'].includes(view)))}">${label}</button>`;
-  return `<header class="top"><div class="brand"><span class="sq" aria-hidden="true"></span>計算と単位の練習帳</div><nav class="tabs" aria-label="画面">${tab('home', 'れんしゅう')}${tab('mine', 'じぶんの記録')}${tab('parent', 'きろく (保護者)')}</nav></header>`;
+  const tabs = PAGE === 'parent' ? tab('parent', 'きろく') + tab('inbox', 'フィードバック') + tab('changes', '改善の記録')
+    : PAGE === 'child' ? tab('home', 'れんしゅう') + tab('mine', 'じぶんの記録')
+      : tab('home', 'れんしゅう') + tab('mine', 'じぶんの記録') + tab('parent', 'きろく (保護者)') + tab('inbox', 'フィードバック') + tab('changes', '改善の記録');
+  return `<header class="top"><div class="brand"><span class="sq" aria-hidden="true"></span>${PAGE === 'parent' ? '練習帳 保護者ページ' : '計算と単位の練習帳'}</div><nav class="tabs" aria-label="画面">${tabs}</nav></header>`;
+}
+function footer() {
+  if (PAGE === 'child') return `<footer class="foot"><span>${APP_VERSION}</span><a href="parent.html">保護者ページ</a></footer>`;
+  if (PAGE === 'parent') return `<footer class="foot"><span>${APP_VERSION}</span><a href="index.html">娘さんのページ (練習) を開く</a></footer>`;
+  return `<footer class="foot"><span>${APP_VERSION}</span></footer>`;
 }
 function dotsHTML(arr, total = 10) {
   let s = '<span class="dots" aria-hidden="true">';
@@ -2423,6 +2704,7 @@ function practiceHTML() {
     } else {
       left += `<div class="feedback ng" role="status"><div class="fb-title">おしい。答えは</div><div class="fb-ans">${p.answerHTML}</div>${gainHTML()}<div class="note">右の「しくみ」で、考え方を1つずつ見てみよう。${sess.reviewed ? '' : `最後まで見ると 見直しボーナス +${PTS.review}点。`}</div><div class="fb-actions"><button class="btn btn-sub" data-act="more">同じ種類をもう1問</button><button class="btn btn-main" data-act="next">${nextLabel}</button></div></div>`;
     }
+    left += flagHTML();
   } else if (!p.choices) {
     left += `<div class="keypad" role="group" aria-label="数字キー">${['7', '8', '9', '⌫', '4', '5', '6', '/', '1', '2', '3', 'と', '0', '.', 'C', 'go'].map((k) => {
       if (k === 'go') return '<button class="key go" data-act="submit">答える</button>';
@@ -2442,7 +2724,7 @@ function practiceHTML() {
     right += '<div class="explain"><p class="ex-empty">答えたあとに、考え方を1つずつ見られます。</p></div>';
   } else {
     const fs = frames(); const f = fs[sess.frame];
-    right += `<div class="explain"><div class="ex-nav"><button class="btn btn-line" data-act="fprev" ${sess.frame === 0 ? 'disabled' : ''}>まえ</button><button class="btn btn-sub" data-act="fnext" ${sess.frame >= fs.length - 1 ? 'disabled' : ''}>つぎ</button><span class="count">${sess.frame + 1} / ${fs.length}</span></div>${f.fig ? `<div class="fig ex-scroll">${f.fig}</div>` : ''}${f.grid ? `<div class="ex-scroll">${gridHTML(f.grid, { div: f.div })}</div>` : ''}<div class="ex-step">${f.text}</div>${f.lesson ? `<div class="fb-actions"><button class="btn btn-sub" data-act="lesson" data-v="${f.lesson}">${LESSONS[f.lesson].btn}</button></div>` : ''}</div>`;
+    right += `<div class="explain"><div class="ex-nav"><button class="btn btn-line" data-act="fprev" ${sess.frame === 0 ? 'disabled' : ''}>まえ</button><button class="btn btn-sub" data-act="fnext" ${sess.frame >= fs.length - 1 ? 'disabled' : ''}>つぎ</button><span class="count">${sess.frame + 1} / ${fs.length}</span></div>${f.fig ? `<div class="fig ex-scroll">${f.fig}</div>` : ''}${f.grid ? `<div class="ex-scroll">${gridHTML(f.grid, { div: f.div })}</div>` : ''}<div class="ex-step">${f.text}</div>${fbFrameHTML(practiceFbKey())}${f.lesson ? `<div class="fb-actions"><button class="btn btn-sub" data-act="lesson" data-v="${f.lesson}">${LESSONS[f.lesson].btn}</button></div>` : ''}</div>`;
   }
   right += '</aside>';
   return `<div class="practice"><div class="col">${left}</div>${right}</div>`;
@@ -2458,6 +2740,7 @@ function resultHTML() {
   if (sess.mode !== 'auto' && sess.mode !== 'retry') h += `<p class="note">${nextMedalText(s.items)}</p>`;
   const wrongTypes = [...new Set(wrong.map((x) => TYPE_NAMES[x.type] + (x.level ? ` (レベル${x.level})` : '')))];
   if (wrongTypes.length) h += `<p class="note">次の練習では、${wrongTypes.join('、')} を多めに出します。</p>`;
+  h += sessionFbHTML();
   h += '<div class="list">' + s.items.map((x) => `<div class="li"><span class="m ${x.ok ? 'ok' : 'ng'}">${x.ok ? '○' : '–'}</span><span class="qq">${x.level ? `<span class="lvchip">Lv${x.level}</span> ` : ''}${esc(x.q)}${x.extra ? ' <span class="pill">もう1問</span>' : ''}${x.hint ? ' <span class="pill">しくみ</span>' : ''}${x.pb ? ' <span class="pill hot">自己ベスト</span>' : ''}</span><span class="aa">${x.ok ? esc(x.answer) : `答え ${esc(x.answer)}<br>入力 ${esc(x.given)}`}</span><span class="tt">${fmtSec(x.ms)}<br><small>+${x.pts || 0}点</small></span></div>`).join('') + '</div>';
   h += `<div class="fb-actions">${wrong.length ? `<button class="btn btn-main" data-act="retry">まちがえた ${wrong.length}問に リベンジ</button>` : ''}${sess.mode !== 'retry' ? `<button class="btn ${wrong.length ? 'btn-sub' : 'btn-main'}" data-act="start" data-v="${sess.mode}"${sess.fixedLv ? ` data-lv="${sess.fixedLv}"` : ''}>もう1回 同じ練習</button>` : ''}<button class="btn btn-line" data-act="tab" data-v="mine">じぶんの記録を見る</button><button class="btn btn-line" data-act="tab" data-v="home">はじめの画面へ</button></div>${wrong.length ? '<p class="note">リベンジは、まちがえた問題と 同じ種類の問題です (数はかわります)。</p>' : ''}</section>`;
   return h;
@@ -2543,7 +2826,7 @@ function mineHTML() {
   // さいきん
   h += '<div class="sec"><h2>さいきんの練習</h2>';
   h += state.sessions.length ? '<div class="list">' + state.sessions.slice(0, 6).map((x) => `<div class="li"><span class="m">${medalHTML(x.medal) || '・'}</span><span class="qq">${fmtDate(x.endedAt)} ${sessLabel(x.mode, x.lv)}${x.quit ? ' <span class="pill">とちゅうまで</span>' : ''}</span><span class="aa">${x.c} / ${x.n} 正解 ${x.score != null ? `${x.score}点` : ''}</span><span class="tt">${x.ms ? fmtSec(x.ms) : ''}</span></div>`).join('') + '</div>' : '<p class="note">まだ記録がありません。</p>';
-  h += '</div></section>';
+  h += '</div>' + mineFbHTML() + '</section>';
   return h;
 }
 function fmtDate(t) { const d = new Date(t); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
@@ -2587,11 +2870,181 @@ function parentHTML() {
   h += `<div class="sec"><h2>データ</h2><div class="danger">${confirmReset ? '<span>この端末と claude.ai のいちばんよい点・正答率をリセットします。練習の記録一覧は残ります。</span><button class="btn btn-danger" data-act="reset-yes">リセットする</button><button class="btn btn-line" data-act="reset-no">やめる</button>' : '<button class="btn btn-line" data-act="reset">いちばんよい点と正答率をリセット</button>'}</div></div>`;
   return h + '</section>';
 }
+// ===== フィードバック (娘さんの声) =====
+// kind: frame (説明が わかった/わからない) | problem (この問題へん？) | session (10問の感想) | comment (ひとこと) | idea (おねがい・アイデア)
+const FB_LABEL = { ok: 'わかった', ng: 'わからない', wrong: '答えがおかしいと思う', meaning: '問題の意味がわからない', fig: '図が見にくい', hard: 'むずかしすぎる', easy: 'かんたん', fit: 'ちょうどいい', tough: 'むずかしい' };
+const stripTags = (h) => String(h || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+function addFeedback(kind, verdict, ctx = {}, text = '') {
+  if (!state.feedback) state.feedback = [];
+  const fb = { id: 'f' + Date.now().toString(36) + Math.floor(rnd() * 1296).toString(36), at: Date.now(), kind, verdict, text: text || undefined, ctx };
+  state.feedback.push(fb); state.feedback = state.feedback.slice(-300);
+  state.updatedAt = Date.now(); saveLocal();
+  return fb;
+}
+function frameCtx() {
+  const p = sess.problem; const fs = frames(); const f = fs[sess.frame];
+  return { type: p.type, stage: p.stage, level: p.level || undefined, q: p.text, answer: p.answerText, frame: sess.frame + 1, frames: fs.length, frameText: stripTags(f.text).slice(0, 90), when: sess.phase === 'answer' ? 'hint' : sess.result ? 'after-ok' : 'after-ng' };
+}
+// 説明の下の「わかった / わからない」
+function fbFrameHTML(key) {
+  const given = (fbGiven[key] || null);
+  if (given) return `<div class="fbq done" role="status">「${FB_LABEL[given]}」を おくりました。ありがとう！</div>`;
+  return `<div class="fbq"><span>この説明は？</span><button class="btn btn-line sm" data-act="fbframe" data-v="ok">わかった</button><button class="btn btn-line sm" data-act="fbframe" data-v="ng">わからない</button></div>`;
+}
+const fbGiven = {}; // その場で押したかどうか (key → verdict)
+function practiceFbKey() { return `p:${sess.id}:${sess.idx}:${sess.frame}`; }
+function lessonFbKey() { return `l:${lesson.id}:${lesson.frame}:${lesson.opened}`; }
+// 答えたあとの「この問題について おしえて」
+function flagHTML() {
+  const key = `q:${sess.id}:${sess.idx}`;
+  if (fbGiven[key]) return `<div class="fbq done" role="status">「${FB_LABEL[fbGiven[key]]}」を おくりました。ありがとう！</div>`;
+  if (!sess.flagOpen) return '<div class="fbq"><button class="linkbtn" data-act="flagopen">この問題について おしえて</button></div>';
+  return `<div class="fbq"><span>どんなこと？</span>${['wrong', 'meaning', 'fig', 'hard'].map((c) => `<button class="btn btn-line sm" data-act="flag" data-v="${c}">${FB_LABEL[c]}</button>`).join('')}</div>`;
+}
+// 結果画面の「この10問は どうだった？」
+function sessionFbHTML() {
+  const r = sess.rating;
+  let h = `<div class="sec fbbox"><h2>この練習は どうだった？</h2><div class="fbq">${['easy', 'fit', 'tough'].map((c) => `<button class="btn ${r === c ? 'btn-sub' : 'btn-line'} sm" data-act="rate" data-v="${c}" aria-pressed="${r === c}">${FB_LABEL[c]}</button>`).join('')}</div>`;
+  h += sess.commentSent ? '<p class="note" role="status">ひとことを おくりました。ありがとう！</p>' : '<label class="fbtext"><span>ひとこと (なくてもOK): わかりにくかったこと、ふやしてほしい問題など</span><textarea id="fb-text" rows="2" maxlength="300"></textarea></label><div class="fb-actions"><button class="btn btn-line sm" data-act="comment">おくる</button></div>';
+  return h + '</div>';
+}
+// じぶんの記録の「おねがい・アイデア」と「おうちの人に おくる」
+function mineFbHTML() {
+  let h = '<div class="sec fbbox"><h2>アプリへの おねがい・アイデア</h2><p class="note">「こんな問題がほしい」「ここがわかりにくい」など、なんでも書いてね。おうちの人と Claude が読んで、アプリをよくします。</p>';
+  h += ideaSent ? '<p class="note" role="status">おくりました。ありがとう！</p>' : '<label class="fbtext"><textarea id="idea-text" rows="3" maxlength="500"></textarea></label><div class="fb-actions"><button class="btn btn-sub sm" data-act="idea">おくる</button></div>';
+  h += `</div><div class="sec fbbox"><h2>おうちの人に 記録を おくる</h2><p class="note">記録と、おくった声を ファイルにして、AirDrop やメッセージで おうちの人に わたせます。</p><div class="fb-actions"><button class="btn btn-line sm" data-act="sendfile">記録を おくる</button>${shareMsg ? `<span class="pill on" role="status">${shareMsg}</span>` : ''}</div></div>`;
+  return h;
+}
+let ideaSent = false; let shareMsg = '';
+// 記録をファイルにして わたす (端末をこえる受け渡し)
+function payload() {
+  if (!state.deviceId) { state.deviceId = 'd' + Date.now().toString(36) + Math.floor(rnd() * 46656).toString(36); saveLocal(); }
+  const { finger, unlocked, ...rest } = state;
+  return Object.assign({ kind: 'keisan-kiroku', exportedAt: Date.now() }, JSON.parse(JSON.stringify(rest)));
+}
+async function shareRecord() {
+  const d = new Date(); const name = `renshu-kiroku-${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}.json`;
+  const blob = new Blob([JSON.stringify(payload())], { type: 'application/json' });
+  try {
+    const file = new File([blob], name, { type: 'application/json' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: '練習帳の記録' }); shareMsg = 'おくる画面を ひらきました'; render(); return; }
+  } catch (e) { if (e && e.name === 'AbortError') return; }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  shareMsg = 'ファイルを ほぞんしました'; render();
+}
+
+// ===== 保護者ページ: 記録の読みこみ・まとめ =====
+const PARENT_KEY = 'keisan-parent-v1';
+function loadParentStore() { try { return Object.assign({ imports: {}, notes: [], sent: {}, batches: [] }, JSON.parse(localStorage.getItem(PARENT_KEY)) || {}); } catch (e) { return { imports: {}, notes: [], sent: {}, batches: [] }; } }
+let pstore = loadParentStore();
+function saveParentStore() { try { localStorage.setItem(PARENT_KEY, JSON.stringify(pstore)); } catch (e) { /* 保存できない環境 */ } }
+// いくつかの記録 (この端末・読みこんだファイル) を1つにまとめる
+function mergeStates(list) {
+  const srcs = list.filter(Boolean); if (!srcs.length) return freshState();
+  const newest = srcs.slice().sort((a, b) => (b.updatedAt || b.exportedAt || 0) - (a.updatedAt || a.exportedAt || 0))[0];
+  const out = Object.assign(freshState(), JSON.parse(JSON.stringify(newest)));
+  const byId = (key) => { const m = new Map(); srcs.forEach((s) => (s[key] || []).forEach((x) => { if (x && x.id && !m.has(x.id)) m.set(x.id, x); })); return [...m.values()]; };
+  out.sessions = byId('sessions').sort((a, b) => b.endedAt - a.endedAt).slice(0, 200);
+  out.feedback = byId('feedback').sort((a, b) => a.at - b.at);
+  const better = (a, b) => (!a ? b : !b ? a : ((b.medal || 0) * 1e6 + (b.score || 0) + b.c > (a.medal || 0) * 1e6 + (a.score || 0) + a.c ? b : a));
+  out.best = {}; srcs.forEach((s) => Object.entries(s.best || {}).forEach(([k, v]) => { out.best[k] = better(out.best[k], v); }));
+  return out;
+}
+function parentSources() {
+  const local = (() => { try { return migrate(JSON.parse(localStorage.getItem(LS_KEY))); } catch (e) { return null; } })();
+  const hasLocal = local && ((local.sessions || []).length || (local.feedback || []).length);
+  return { local: hasLocal ? local : null, imports: Object.values(pstore.imports) };
+}
+function importFile(file) {
+  const rd = new FileReader();
+  rd.onload = () => {
+    try {
+      const d = JSON.parse(rd.result);
+      if (!d || d.kind !== 'keisan-kiroku' || !Array.isArray(d.sessions)) throw new Error('kind');
+      pstore.imports[d.deviceId || 'import'] = d; saveParentStore();
+      state = mergeStates([parentSources().local, ...Object.values(pstore.imports)]);
+      importMsg = `読みこみました (${fmtDate(d.exportedAt)} の記録、練習 ${d.sessions.length}回・声 ${(d.feedback || []).length}件)`;
+    } catch (e) { importMsg = 'このファイルは読みこめませんでした。「記録を おくる」で作ったファイルを えらんでください。'; }
+    render();
+  };
+  rd.readAsText(file);
+}
+let importMsg = ''; let report = null; let withData = false; let noteMsg = '';
+const NOTE_CATS = ['まちがい・バグ', 'わかりにくい', '追加してほしい', 'むずかしさ', 'その他'];
+const fbCtxText = (c) => [c.stage ? `${c.stage}${c.level ? ` Lv${c.level}` : ''} ${TYPE_NAMES[c.type] || ''}`.trim() : '', c.lesson ? `読みもの「${(LESSONS[c.lesson] || {}).title || c.lesson}」` : '', c.frame ? `${c.frame}/${c.frames || '?'}枚目` : ''].filter(Boolean).join(' ');
+// 記録から自動で見つけること
+function insights(st) {
+  const out = []; const ts = st.typeStats || {};
+  Object.entries(ts).forEach(([t, s]) => { if (s.n >= 5 && s.c / s.n < 0.7) out.push({ k: 'low', s: `正答率が低い: ${TYPE_NAMES[t] || t} (${stageOfType(t)}) ${Math.round(s.c / s.n * 100)}% (${s.n}問)` }); });
+  Object.entries(ts).forEach(([t, s]) => { if (s.n >= 5 && s.hint / s.n >= 0.4) out.push({ k: 'hint', s: `先に しくみを見ることが多い: ${TYPE_NAMES[t] || t} ${Math.round(s.hint / s.n * 100)}%` }); });
+  const ms = {}; (st.sessions || []).forEach((x) => x.items.forEach((i) => { if (i.ok) (ms[i.type] = ms[i.type] || []).push(i.ms); }));
+  Object.entries(ms).forEach(([t, a]) => { if (a.length >= 5) { const avg = a.reduce((x, y) => x + y, 0) / a.length; if (avg > 60000) out.push({ k: 'slow', s: `時間がかかる: ${TYPE_NAMES[t] || t} 正解までの平均 ${fmtSec(avg)}` }); } });
+  const ng = {}; (st.feedback || []).filter((f) => f.kind === 'frame' && f.verdict === 'ng').forEach((f) => { const k = f.ctx.lesson ? `読みもの「${(LESSONS[f.ctx.lesson] || {}).title}」${f.ctx.frame}枚目` : `${TYPE_NAMES[f.ctx.type] || f.ctx.type} の しくみ ${f.ctx.frame}枚目`; ng[k] = (ng[k] || 0) + 1; });
+  Object.entries(ng).sort((a, b) => b[1] - a[1]).forEach(([k, n]) => out.push({ k: 'ng', s: `「わからない」が押された説明: ${k} (${n}回)` }));
+  const tough = {}; (st.feedback || []).filter((f) => f.kind === 'session' && f.verdict === 'tough').forEach((f) => { const k = sessLabel(f.ctx.mode, f.ctx.lv); tough[k] = (tough[k] || 0) + 1; });
+  Object.entries(tough).forEach(([k, n]) => out.push({ k: 'tough', s: `「むずかしい」と答えた練習: ${k} (${n}回)` }));
+  return out;
+}
+function fbLine(f) {
+  const tag = f.kind === 'frame' ? `説明: ${FB_LABEL[f.verdict]}` : f.kind === 'problem' ? `問題へん？: ${FB_LABEL[f.verdict]}` : f.kind === 'session' ? `感想: ${FB_LABEL[f.verdict]}` : f.kind === 'comment' ? 'ひとこと' : 'アイデア';
+  const c = f.ctx || {};
+  const where = f.kind === 'session' || f.kind === 'comment' ? `${sessLabel(c.mode, c.lv)}${c.n ? ` ${c.c}/${c.n}正解` : ''}` : fbCtxText(c);
+  return { tag, where, q: c.q, extra: f.kind === 'frame' ? c.frameText : f.kind === 'problem' ? `答え ${c.answer || ''}${c.given ? ` / 入力 ${c.given}` : ''}` : '', text: f.text };
+}
+function buildReport() {
+  const st = state; const d = new Date(); const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+  const id = `FB-${ymd}-${pstore.batches.filter((b) => b.id.startsWith(`FB-${ymd}`)).length + 1}`;
+  const fbs = (st.feedback || []).filter((f) => !pstore.sent[f.id] && !(f.kind === 'frame' && f.verdict === 'ok'));
+  const oks = (st.feedback || []).filter((f) => !pstore.sent[f.id] && f.kind === 'frame' && f.verdict === 'ok');
+  const notes = pstore.notes.filter((n) => !pstore.sent[n.id]);
+  let t = `# 練習帳フィードバック ${id}\n作成: ${d.toLocaleString('ja-JP')} / アプリ ${APP_VERSION}\n\n## 保護者のメモ (${notes.length})\n`;
+  t += notes.length ? notes.map((n, i) => `- [N${i + 1}][${n.cat}] ${n.text}`).join('\n') : '- なし';
+  t += `\n\n## 娘さんの声 (${fbs.length})\n`;
+  t += fbs.length ? fbs.map((f, i) => { const l = fbLine(f); return `- [F${i + 1}][${l.tag}]${l.where ? ' ' + l.where : ''}${l.q ? ` 問題「${l.q}」` : ''}${l.extra ? ` (${l.extra})` : ''}${l.text ? ` 「${l.text}」` : ''}`; }).join('\n') : '- なし';
+  if (oks.length) t += `\n- (「わかった」${oks.length}件: ${[...new Set(oks.map((f) => fbCtxText(f.ctx)))].slice(0, 8).join('、')})`;
+  const ins = insights(st);
+  t += `\n\n## 記録から自動で見つけたこと\n${ins.length ? ins.map((x) => `- ${x.s}`).join('\n') : '- とくになし'}`;
+  const ss = st.sessions || []; const n = ss.reduce((a, x) => a + x.n, 0), c = ss.reduce((a, x) => a + x.c, 0);
+  const wk = ss.filter((x) => x.endedAt > Date.now() - 7 * 864e5);
+  t += `\n\n## 数字\n- 練習 ${ss.length}回 / ${n}問 / 正答率 ${n ? Math.round(c / n * 100) : 0}%\n- この7日: 練習 ${wk.length}回 / ${wk.reduce((a, x) => a + x.n, 0)}問\n- メダル: ${[3, 2, 1].map((m) => `${MEDAL[m]}${Object.values(st.best || {}).filter((b) => b.medal === m).length}`).join(' ')}`;
+  if (withData) t += `\n\n## 記録データ\n${exportText()}`;
+  return { id, text: t, fbIds: [...fbs, ...oks].map((f) => f.id), noteIds: notes.map((x) => x.id), count: fbs.length + notes.length };
+}
+function inboxHTML() {
+  const src = parentSources(); const st = state;
+  let h = '<section class="parent">';
+  h += `<div><h1 style="font-size:1.6rem">フィードバック</h1><p class="note">娘さんがアプリで押した声と、保護者のメモを まとめて Claude に送ります。</p></div>`;
+  h += figFlow([{ s: '① 娘さん', sub: 'わかった・わからない\nひとこと・アイデア' }, { s: '② 記録を わたす', sub: '同じ端末なら そのまま\nちがう端末は ファイル', cls: 'sh3' }, { s: '③ Claude に送る', sub: 'まとめを スレッドへ\nはりつけ', cls: 'sh2' }, { s: '④ 改善・公開', sub: '「改善の記録」に\nのる' }], { h: 84, W: 860, label: 'フィードバックの流れ' });
+  h += `<div class="sec"><h2>記録の読みこみ</h2><p class="note">見ている記録: ${src.local ? 'この端末の記録' : ''}${src.local && src.imports.length ? ' + ' : ''}${src.imports.map((d) => `ファイル (${fmtDate(d.exportedAt)})`).join('、')}${!src.local && !src.imports.length ? 'まだありません。娘さんの「じぶんの記録 → 記録を おくる」で作ったファイルを読みこんでください。' : ''}</p><div class="fb-actions"><label class="btn btn-line sm filebtn">記録ファイルを読みこむ<input type="file" accept="application/json,.json" data-act="import" hidden></label>${importMsg ? `<span class="pill on" role="status">${esc(importMsg)}</span>` : ''}</div></div>`;
+  const ins = insights(st);
+  h += `<div class="sec"><h2>記録から自動で見つけたこと</h2>${ins.length ? `<ul class="ins">${ins.map((x) => `<li class="${x.k}">${esc(x.s)}</li>`).join('')}</ul>` : '<p class="note">今のところ、とくにありません (5問以上の記録から見つけます)。</p>'}</div>`;
+  const fbs = (st.feedback || []).slice().reverse();
+  h += `<div class="sec"><h2>娘さんの声 (${fbs.length})</h2>`;
+  if (!fbs.length) h += '<p class="note">まだありません。説明の下の「わかった / わからない」、答えたあとの「この問題について おしえて」、結果画面の感想、じぶんの記録の「おねがい・アイデア」から届きます。</p>';
+  else h += '<div class="list">' + fbs.slice(0, 60).map((f) => { const l = fbLine(f); return `<div class="li"><span class="m ${f.verdict === 'ng' || f.kind === 'problem' || f.verdict === 'tough' ? 'ng' : 'ok'}">${f.verdict === 'ok' || f.verdict === 'fit' || f.verdict === 'easy' ? '○' : '!'}</span><span class="qq"><b>${esc(l.tag)}</b> ${esc(l.where)}${l.q ? `<br><small>問題: ${esc(l.q)}</small>` : ''}${l.extra ? `<br><small>${esc(l.extra)}</small>` : ''}${l.text ? `<br>「${esc(l.text)}」` : ''}</span><span class="aa"><small>${fmtDate(f.at)}</small></span><span class="tt">${pstore.sent[f.id] ? `<span class="pill">送信済み ${pstore.sent[f.id]}</span>` : '<span class="pill hot">未送信</span>'}</span></div>`; }).join('') + '</div>';
+  h += '</div>';
+  h += `<div class="sec"><h2>保護者のメモ</h2><div class="noteform"><select id="note-cat">${NOTE_CATS.map((c) => `<option>${c}</option>`).join('')}</select><textarea id="note-text" rows="2" maxlength="1000" placeholder="気づいたこと・直してほしいこと・追加したいこと"></textarea><button class="btn btn-sub sm" data-act="note">メモに追加</button></div>${noteMsg ? `<p class="note" role="status">${noteMsg}</p>` : ''}`;
+  if (pstore.notes.length) h += '<div class="list">' + pstore.notes.slice().reverse().map((n) => `<div class="li"><span class="m">・</span><span class="qq"><b>${esc(n.cat)}</b> ${esc(n.text)}</span><span class="aa"><small>${fmtDate(n.at)}</small></span><span class="tt">${pstore.sent[n.id] ? `<span class="pill">送信済み ${pstore.sent[n.id]}</span>` : `<button class="linkbtn" data-act="delnote" data-v="${n.id}">けす</button>`}</span></div>`).join('') + '</div>';
+  h += '</div>';
+  const unsent = (st.feedback || []).filter((f) => !pstore.sent[f.id] && !(f.kind === 'frame' && f.verdict === 'ok')).length + pstore.notes.filter((n) => !pstore.sent[n.id]).length;
+  h += `<div class="sec fbbox"><h2>Claude に送る</h2><p class="note">未送信の声とメモ <b>${unsent}件</b>、自動で見つけたこと、数字を 1つのまとめにします。「共有」か「コピー」で、プロジェクトのスレッドに はりつけてください。送ったまとめは「改善の記録」で、どう直したかを確かめられます。</p><label class="chk"><input type="checkbox" data-act="withdata" ${withData ? 'checked' : ''}> 記録の全データも付ける (くわしく調べたいとき)</label><div class="fb-actions"><button class="btn btn-main" data-act="mkreport">まとめを作る</button></div>`;
+  if (report) h += `<textarea id="report-box" class="exportbox" rows="10" readonly>${esc(report.text)}</textarea><div class="fb-actions"><button class="btn btn-sub sm" data-act="sharereport">共有</button><button class="btn btn-line sm" data-act="copyreport">コピー</button><button class="btn btn-line sm" data-act="marksent">送ったので「送信済み」にする</button>${report.msg ? `<span class="pill on" role="status">${report.msg}</span>` : ''}</div>`;
+  h += '</div></section>';
+  return h;
+}
+function changesHTML() {
+  let h = '<section class="parent"><div><h1 style="font-size:1.6rem">改善の記録</h1><p class="note">アプリの版ごとに、何を直したか・だれの声からか を まとめています。送ったまとめの番号 (FB-…) が入っていれば、その声への対応です。</p></div>';
+  if (pstore.batches.length) {
+    h += '<div class="sec"><h2>送ったまとめ</h2><div class="list">' + pstore.batches.slice().reverse().map((b) => { const done = CHANGELOG.find((c) => (c.from || []).includes(b.id)); return `<div class="li"><span class="m ${done ? 'ok' : ''}">${done ? '○' : '…'}</span><span class="qq"><b>${b.id}</b> 声とメモ ${b.count}件</span><span class="aa"><small>${fmtDate(b.at)}</small></span><span class="tt">${done ? `<span class="pill on">対応 v${done.v}</span>` : '<span class="pill">Claude の対応待ち</span>'}</span></div>`; }).join('') + '</div></div>';
+  }
+  h += '<div class="sec"><h2>版ごとの変更</h2><div class="clog">' + CHANGELOG.map((c) => `<details ${c === CHANGELOG[0] ? 'open' : ''}><summary><b>v${c.v}</b> <span>${c.date}</span> ${esc(c.title)}</summary><ul>${c.items.map((x) => `<li>${esc(x)}</li>`).join('')}</ul><p class="note">きっかけ: ${(c.from || []).map(esc).join('、') || '—'}</p></details>`).join('') + '</div></div>';
+  return h + '</section>';
+}
 // 読みもの (例: 計算の順番のわけ)。back は もどる先の画面
 let lesson = null; // { id, frame, back, frames }
 function lessonHTML() {
   const L = LESSONS[lesson.id]; const fs = lesson.frames; const f = fs[lesson.frame];
-  return `<section class="lesson"><div class="lesson-head"><h1>${L.title}</h1><button class="btn btn-line" data-act="lback">${lesson.back === 'practice' ? '問題にもどる' : 'はじめの画面へ'}</button></div><div class="explain"><div class="ex-nav"><button class="btn btn-line" data-act="lprev" ${lesson.frame === 0 ? 'disabled' : ''}>まえ</button><button class="btn btn-sub" data-act="lnext" ${lesson.frame >= fs.length - 1 ? 'disabled' : ''}>つぎ</button><span class="count">${lesson.frame + 1} / ${fs.length}</span></div><div class="fig ex-scroll">${f.fig}</div><div class="ex-step">${f.text}</div></div></section>`;
+  return `<section class="lesson"><div class="lesson-head"><h1>${L.title}</h1><button class="btn btn-line" data-act="lback">${lesson.back === 'practice' ? '問題にもどる' : 'はじめの画面へ'}</button></div><div class="explain"><div class="ex-nav"><button class="btn btn-line" data-act="lprev" ${lesson.frame === 0 ? 'disabled' : ''}>まえ</button><button class="btn btn-sub" data-act="lnext" ${lesson.frame >= fs.length - 1 ? 'disabled' : ''}>つぎ</button><span class="count">${lesson.frame + 1} / ${fs.length}</span></div><div class="fig ex-scroll">${f.fig}</div><div class="ex-step">${f.text}</div>${fbFrameHTML(lessonFbKey())}</div></section>`;
 }
 function render() {
   const el = app(); if (!el) return;
@@ -2601,8 +3054,10 @@ function render() {
   else if (view === 'result') body = resultHTML();
   else if (view === 'lesson') body = lessonHTML();
   else if (view === 'mine') body = mineHTML();
+  else if (view === 'inbox') body = inboxHTML();
+  else if (view === 'changes') body = changesHTML();
   else body = parentHTML();
-  el.innerHTML = `<div class="wrap">${header()}${body}</div>`;
+  el.innerHTML = `<div class="wrap">${header()}${body}${footer()}</div>`;
   if (view === 'practice' && sess.sideTab === 'memo') attachMemo();
 }
 
@@ -2674,7 +3129,7 @@ document.addEventListener('click', (e) => {
   const b = e.target.closest('[data-act]'); if (!b) return;
   const a = b.dataset.act, v = b.dataset.v;
   if (a === 'tab') { if (view === 'practice' && sess && sess.phase) { finishSession(true); } view = v; confirmReset = false; copyState = null; render(); window.scrollTo(0, 0); }
-  else if (a === 'lesson') { lesson = { id: v, frame: 0, back: view === 'practice' ? 'practice' : 'home', frames: LESSONS[v].frames() }; view = 'lesson'; render(); window.scrollTo(0, 0); }
+  else if (a === 'lesson') { lesson = { id: v, frame: 0, back: view === 'practice' ? 'practice' : 'home', frames: LESSONS[v].frames(), opened: Date.now() }; view = 'lesson'; render(); window.scrollTo(0, 0); }
   else if (a === 'lprev') { lesson.frame = Math.max(0, lesson.frame - 1); render(); }
   else if (a === 'lnext') { lesson.frame = Math.min(lesson.frames.length - 1, lesson.frame + 1); render(); }
   else if (a === 'lback') { view = lesson.back === 'practice' && sess ? 'practice' : 'home'; lesson = null; render(); window.scrollTo(0, 0); }
@@ -2699,9 +3154,34 @@ document.addEventListener('click', (e) => {
     const manual = () => { copyState = 'manual'; render(); const t = document.getElementById('export-box'); if (t) { t.focus(); t.select(); } };
     try { navigator.clipboard.writeText(txt).then(() => { copyState = 'ok'; render(); }, manual); } catch (err) { manual(); }
   }
+  else if (a === 'fbframe') {
+    if (view === 'lesson') { fbGiven[lessonFbKey()] = v; addFeedback('frame', v, { lesson: lesson.id, frame: lesson.frame + 1, frames: lesson.frames.length, frameText: stripTags(lesson.frames[lesson.frame].text).slice(0, 90) }); }
+    else { fbGiven[practiceFbKey()] = v; addFeedback('frame', v, frameCtx()); }
+    render();
+  }
+  else if (a === 'flagopen') { sess.flagOpen = true; render(); }
+  else if (a === 'flag') { const p = sess.problem; const it = sess.items[sess.items.length - 1] || {}; fbGiven[`q:${sess.id}:${sess.idx}`] = v; addFeedback('problem', v, { type: p.type, stage: p.stage, level: p.level || undefined, q: p.text, answer: p.answerText, given: it.given, ok: it.ok }); render(); }
+  else if (a === 'rate') { const s2 = sess.saved || {}; const ctx = { mode: sess.mode, lv: sess.fixedLv || undefined, c: s2.c, n: s2.n, ms: s2.ms, sessionId: s2.id };
+    if (sess.ratingFb) { sess.ratingFb.verdict = v; sess.ratingFb.at = Date.now(); state.updatedAt = Date.now(); saveLocal(); } else sess.ratingFb = addFeedback('session', v, ctx);
+    sess.rating = v; render(); }
+  else if (a === 'comment') { const t = (document.getElementById('fb-text') || {}).value || ''; if (t.trim()) { const s2 = sess.saved || {}; addFeedback('comment', sess.rating || '', { mode: sess.mode, lv: sess.fixedLv || undefined, c: s2.c, n: s2.n, sessionId: s2.id }, t.trim()); sess.commentSent = true; render(); } }
+  else if (a === 'idea') { const t = (document.getElementById('idea-text') || {}).value || ''; if (t.trim()) { addFeedback('idea', '', {}, t.trim()); ideaSent = true; render(); } }
+  else if (a === 'sendfile') { shareRecord(); }
+  else if (a === 'note') { const t = (document.getElementById('note-text') || {}).value || ''; const cat = (document.getElementById('note-cat') || {}).value || 'その他'; if (t.trim()) { pstore.notes.push({ id: 'n' + Date.now().toString(36), at: Date.now(), cat, text: t.trim() }); saveParentStore(); noteMsg = 'メモに追加しました。'; render(); } }
+  else if (a === 'delnote') { pstore.notes = pstore.notes.filter((n) => n.id !== v); saveParentStore(); render(); }
+  else if (a === 'withdata') { withData = b.checked; report = null; }
+  else if (a === 'mkreport') { report = buildReport(); render(); const t = document.getElementById('report-box'); if (t) t.scrollIntoView({ block: 'center' }); }
+  else if (a === 'sharereport') { if (navigator.share) navigator.share({ title: report.id, text: report.text }).then(() => { report.msg = '共有しました。送ったら「送信済み」にしてください'; render(); }, () => {}); else { report.msg = 'この端末では共有が使えません。コピーしてください'; render(); } }
+  else if (a === 'copyreport') { const ok = () => { report.msg = 'コピーしました。スレッドに はりつけてください'; render(); }; const manual = () => { report.msg = '下の文を選んでコピーしてください'; render(); const t = document.getElementById('report-box'); if (t) { t.focus(); t.select(); } }; try { navigator.clipboard.writeText(report.text).then(ok, manual); } catch (err) { manual(); } }
+  else if (a === 'marksent') { report.fbIds.forEach((id) => { pstore.sent[id] = report.id; }); report.noteIds.forEach((id) => { pstore.sent[id] = report.id; }); pstore.batches.push({ id: report.id, at: Date.now(), count: report.count }); saveParentStore(); report = null; noteMsg = ''; render(); }
   else if (a === 'reset') { confirmReset = true; render(); }
   else if (a === 'reset-no') { confirmReset = false; render(); }
-  else if (a === 'reset-yes') { const keep = state.sessions; const f = state.finger; state = freshState(); state.sessions = keep; state.finger = f; state.updatedAt = Date.now(); saveLocal(); saveRemote(); confirmReset = false; render(); }
+  else if (a === 'reset-yes') {
+    if (PAGE === 'parent') { // この端末の記録だけをリセットし、読みこんだファイルはそのまま
+      const local = parentSources().local; if (local) { const f = freshState(); f.sessions = local.sessions || []; f.feedback = local.feedback || []; f.deviceId = local.deviceId; f.xp = local.xp; f.updatedAt = Date.now(); try { localStorage.setItem(LS_KEY, JSON.stringify(f)); } catch (e) { /* 保存できない */ } }
+      state = mergeStates([parentSources().local, ...Object.values(pstore.imports)]); confirmReset = false; render(); return;
+    }
+    const keep = state.sessions; const fb = state.feedback; const f = state.finger; const dev = state.deviceId; const xp = state.xp; state = freshState(); state.sessions = keep; state.feedback = fb; state.finger = f; state.deviceId = dev; state.xp = xp; state.updatedAt = Date.now(); saveLocal(); saveRemote(); confirmReset = false; render(); }
 });
 document.addEventListener('keydown', (e) => {
   if (view !== 'practice' || !sess) return;
@@ -2719,8 +3199,10 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) sess.hiddenAt = Date.now();
   else if (sess.hiddenAt) { sess.t0 += Date.now() - sess.hiddenAt; sess.hiddenAt = null; }
 });
+document.addEventListener('change', (e) => { const t = e.target; if (t && t.dataset && t.dataset.act === 'import' && t.files && t.files[0]) importFile(t.files[0]); });
+if (PAGE === 'parent') state = mergeStates([parentSources().local, ...Object.values(pstore.imports)]);
 render();
-initDb();
+if (PAGE !== 'parent') initDb();
 </script>
 </body>
 </html>

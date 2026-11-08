@@ -24,7 +24,7 @@ function nextMedalText(items) {
 function allCourses() { const ks = []; for (const st of Object.keys(STAGES)) { ks.push(st); if (STAGES[st].levels) Object.keys(STAGES[st].levels).forEach((n) => ks.push(`${st}:${n}`)); } return ks; }
 const elapsed = () => (sess.hiddenAt ? sess.hiddenAt : Date.now()) - sess.t0;
 function freshState() {
-  return { v: 2, updatedAt: 0, unlocked: { A1: true, B1: true }, best: {}, mistakes: {}, typeStats: {}, fastest: {}, sessions: [] };
+  return { v: 2, updatedAt: 0, unlocked: { A1: true, B1: true }, best: {}, mistakes: {}, typeStats: {}, fastest: {}, sessions: [], feedback: [] };
 }
 // v1 (A1=整数・小数, A2=分数, A3=まぜた計算) → v2 (A1=整数, A2=小数, A3=分数, A4=まぜた計算)
 function migrate(s) {
@@ -46,7 +46,10 @@ function loadLocal() {
   try { const s = migrate(JSON.parse(localStorage.getItem(LS_KEY))); if (s) return Object.assign(freshState(), s); } catch (e) { /* 読めないときは新しく始める */ }
   return freshState();
 }
+// 保護者ページは 記録を読むだけ (リセットのときだけ書く)
+let allowWrite = PAGE !== 'parent';
 function saveLocal() {
+  if (!allowWrite) return;
   try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { /* 保存できない環境 */ }
 }
 let state = loadLocal();
@@ -118,7 +121,7 @@ function planSession(mode, fixedLv) {
 }
 
 // ===== 練習の状態 =====
-let view = 'home';
+let view = PAGE === 'parent' ? 'parent' : 'home';
 let sess = null; // {id, mode, plan:[{type, extra}], idx, items:[], startedAt, problem, inputs, active, phase, t0, sideTab, frame, hint}
 function startSession(mode, fixedLv, plan) {
   fixedLv = fixedLv ? +fixedLv : null;
@@ -243,7 +246,15 @@ const app = () => document.getElementById('app');
 
 function header() {
   const tab = (id, label) => `<button data-act="tab" data-v="${id}" aria-pressed="${(view === id || (id === 'home' && ['practice', 'result', 'lesson'].includes(view)))}">${label}</button>`;
-  return `<header class="top"><div class="brand"><span class="sq" aria-hidden="true"></span>計算と単位の練習帳</div><nav class="tabs" aria-label="画面">${tab('home', 'れんしゅう')}${tab('mine', 'じぶんの記録')}${tab('parent', 'きろく (保護者)')}</nav></header>`;
+  const tabs = PAGE === 'parent' ? tab('parent', 'きろく') + tab('inbox', 'フィードバック') + tab('changes', '改善の記録')
+    : PAGE === 'child' ? tab('home', 'れんしゅう') + tab('mine', 'じぶんの記録')
+      : tab('home', 'れんしゅう') + tab('mine', 'じぶんの記録') + tab('parent', 'きろく (保護者)') + tab('inbox', 'フィードバック') + tab('changes', '改善の記録');
+  return `<header class="top"><div class="brand"><span class="sq" aria-hidden="true"></span>${PAGE === 'parent' ? '練習帳 保護者ページ' : '計算と単位の練習帳'}</div><nav class="tabs" aria-label="画面">${tabs}</nav></header>`;
+}
+function footer() {
+  if (PAGE === 'child') return `<footer class="foot"><span>${APP_VERSION}</span><a href="parent.html">保護者ページ</a></footer>`;
+  if (PAGE === 'parent') return `<footer class="foot"><span>${APP_VERSION}</span><a href="index.html">娘さんのページ (練習) を開く</a></footer>`;
+  return `<footer class="foot"><span>${APP_VERSION}</span></footer>`;
 }
 function dotsHTML(arr, total = 10) {
   let s = '<span class="dots" aria-hidden="true">';
@@ -332,6 +343,7 @@ function practiceHTML() {
     } else {
       left += `<div class="feedback ng" role="status"><div class="fb-title">おしい。答えは</div><div class="fb-ans">${p.answerHTML}</div>${gainHTML()}<div class="note">右の「しくみ」で、考え方を1つずつ見てみよう。${sess.reviewed ? '' : `最後まで見ると 見直しボーナス +${PTS.review}点。`}</div><div class="fb-actions"><button class="btn btn-sub" data-act="more">同じ種類をもう1問</button><button class="btn btn-main" data-act="next">${nextLabel}</button></div></div>`;
     }
+    left += flagHTML();
   } else if (!p.choices) {
     left += `<div class="keypad" role="group" aria-label="数字キー">${['7', '8', '9', '⌫', '4', '5', '6', '/', '1', '2', '3', 'と', '0', '.', 'C', 'go'].map((k) => {
       if (k === 'go') return '<button class="key go" data-act="submit">答える</button>';
@@ -351,7 +363,7 @@ function practiceHTML() {
     right += '<div class="explain"><p class="ex-empty">答えたあとに、考え方を1つずつ見られます。</p></div>';
   } else {
     const fs = frames(); const f = fs[sess.frame];
-    right += `<div class="explain"><div class="ex-nav"><button class="btn btn-line" data-act="fprev" ${sess.frame === 0 ? 'disabled' : ''}>まえ</button><button class="btn btn-sub" data-act="fnext" ${sess.frame >= fs.length - 1 ? 'disabled' : ''}>つぎ</button><span class="count">${sess.frame + 1} / ${fs.length}</span></div>${f.fig ? `<div class="fig ex-scroll">${f.fig}</div>` : ''}${f.grid ? `<div class="ex-scroll">${gridHTML(f.grid, { div: f.div })}</div>` : ''}<div class="ex-step">${f.text}</div>${f.lesson ? `<div class="fb-actions"><button class="btn btn-sub" data-act="lesson" data-v="${f.lesson}">${LESSONS[f.lesson].btn}</button></div>` : ''}</div>`;
+    right += `<div class="explain"><div class="ex-nav"><button class="btn btn-line" data-act="fprev" ${sess.frame === 0 ? 'disabled' : ''}>まえ</button><button class="btn btn-sub" data-act="fnext" ${sess.frame >= fs.length - 1 ? 'disabled' : ''}>つぎ</button><span class="count">${sess.frame + 1} / ${fs.length}</span></div>${f.fig ? `<div class="fig ex-scroll">${f.fig}</div>` : ''}${f.grid ? `<div class="ex-scroll">${gridHTML(f.grid, { div: f.div })}</div>` : ''}<div class="ex-step">${f.text}</div>${fbFrameHTML(practiceFbKey())}${f.lesson ? `<div class="fb-actions"><button class="btn btn-sub" data-act="lesson" data-v="${f.lesson}">${LESSONS[f.lesson].btn}</button></div>` : ''}</div>`;
   }
   right += '</aside>';
   return `<div class="practice"><div class="col">${left}</div>${right}</div>`;
@@ -367,6 +379,7 @@ function resultHTML() {
   if (sess.mode !== 'auto' && sess.mode !== 'retry') h += `<p class="note">${nextMedalText(s.items)}</p>`;
   const wrongTypes = [...new Set(wrong.map((x) => TYPE_NAMES[x.type] + (x.level ? ` (レベル${x.level})` : '')))];
   if (wrongTypes.length) h += `<p class="note">次の練習では、${wrongTypes.join('、')} を多めに出します。</p>`;
+  h += sessionFbHTML();
   h += '<div class="list">' + s.items.map((x) => `<div class="li"><span class="m ${x.ok ? 'ok' : 'ng'}">${x.ok ? '○' : '–'}</span><span class="qq">${x.level ? `<span class="lvchip">Lv${x.level}</span> ` : ''}${esc(x.q)}${x.extra ? ' <span class="pill">もう1問</span>' : ''}${x.hint ? ' <span class="pill">しくみ</span>' : ''}${x.pb ? ' <span class="pill hot">自己ベスト</span>' : ''}</span><span class="aa">${x.ok ? esc(x.answer) : `答え ${esc(x.answer)}<br>入力 ${esc(x.given)}`}</span><span class="tt">${fmtSec(x.ms)}<br><small>+${x.pts || 0}点</small></span></div>`).join('') + '</div>';
   h += `<div class="fb-actions">${wrong.length ? `<button class="btn btn-main" data-act="retry">まちがえた ${wrong.length}問に リベンジ</button>` : ''}${sess.mode !== 'retry' ? `<button class="btn ${wrong.length ? 'btn-sub' : 'btn-main'}" data-act="start" data-v="${sess.mode}"${sess.fixedLv ? ` data-lv="${sess.fixedLv}"` : ''}>もう1回 同じ練習</button>` : ''}<button class="btn btn-line" data-act="tab" data-v="mine">じぶんの記録を見る</button><button class="btn btn-line" data-act="tab" data-v="home">はじめの画面へ</button></div>${wrong.length ? '<p class="note">リベンジは、まちがえた問題と 同じ種類の問題です (数はかわります)。</p>' : ''}</section>`;
   return h;
@@ -452,7 +465,7 @@ function mineHTML() {
   // さいきん
   h += '<div class="sec"><h2>さいきんの練習</h2>';
   h += state.sessions.length ? '<div class="list">' + state.sessions.slice(0, 6).map((x) => `<div class="li"><span class="m">${medalHTML(x.medal) || '・'}</span><span class="qq">${fmtDate(x.endedAt)} ${sessLabel(x.mode, x.lv)}${x.quit ? ' <span class="pill">とちゅうまで</span>' : ''}</span><span class="aa">${x.c} / ${x.n} 正解 ${x.score != null ? `${x.score}点` : ''}</span><span class="tt">${x.ms ? fmtSec(x.ms) : ''}</span></div>`).join('') + '</div>' : '<p class="note">まだ記録がありません。</p>';
-  h += '</div></section>';
+  h += '</div>' + mineFbHTML() + '</section>';
   return h;
 }
 function fmtDate(t) { const d = new Date(t); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
@@ -496,11 +509,181 @@ function parentHTML() {
   h += `<div class="sec"><h2>データ</h2><div class="danger">${confirmReset ? '<span>この端末と claude.ai のいちばんよい点・正答率をリセットします。練習の記録一覧は残ります。</span><button class="btn btn-danger" data-act="reset-yes">リセットする</button><button class="btn btn-line" data-act="reset-no">やめる</button>' : '<button class="btn btn-line" data-act="reset">いちばんよい点と正答率をリセット</button>'}</div></div>`;
   return h + '</section>';
 }
+// ===== フィードバック (娘さんの声) =====
+// kind: frame (説明が わかった/わからない) | problem (この問題へん？) | session (10問の感想) | comment (ひとこと) | idea (おねがい・アイデア)
+const FB_LABEL = { ok: 'わかった', ng: 'わからない', wrong: '答えがおかしいと思う', meaning: '問題の意味がわからない', fig: '図が見にくい', hard: 'むずかしすぎる', easy: 'かんたん', fit: 'ちょうどいい', tough: 'むずかしい' };
+const stripTags = (h) => String(h || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+function addFeedback(kind, verdict, ctx = {}, text = '') {
+  if (!state.feedback) state.feedback = [];
+  const fb = { id: 'f' + Date.now().toString(36) + Math.floor(rnd() * 1296).toString(36), at: Date.now(), kind, verdict, text: text || undefined, ctx };
+  state.feedback.push(fb); state.feedback = state.feedback.slice(-300);
+  state.updatedAt = Date.now(); saveLocal();
+  return fb;
+}
+function frameCtx() {
+  const p = sess.problem; const fs = frames(); const f = fs[sess.frame];
+  return { type: p.type, stage: p.stage, level: p.level || undefined, q: p.text, answer: p.answerText, frame: sess.frame + 1, frames: fs.length, frameText: stripTags(f.text).slice(0, 90), when: sess.phase === 'answer' ? 'hint' : sess.result ? 'after-ok' : 'after-ng' };
+}
+// 説明の下の「わかった / わからない」
+function fbFrameHTML(key) {
+  const given = (fbGiven[key] || null);
+  if (given) return `<div class="fbq done" role="status">「${FB_LABEL[given]}」を おくりました。ありがとう！</div>`;
+  return `<div class="fbq"><span>この説明は？</span><button class="btn btn-line sm" data-act="fbframe" data-v="ok">わかった</button><button class="btn btn-line sm" data-act="fbframe" data-v="ng">わからない</button></div>`;
+}
+const fbGiven = {}; // その場で押したかどうか (key → verdict)
+function practiceFbKey() { return `p:${sess.id}:${sess.idx}:${sess.frame}`; }
+function lessonFbKey() { return `l:${lesson.id}:${lesson.frame}:${lesson.opened}`; }
+// 答えたあとの「この問題について おしえて」
+function flagHTML() {
+  const key = `q:${sess.id}:${sess.idx}`;
+  if (fbGiven[key]) return `<div class="fbq done" role="status">「${FB_LABEL[fbGiven[key]]}」を おくりました。ありがとう！</div>`;
+  if (!sess.flagOpen) return '<div class="fbq"><button class="linkbtn" data-act="flagopen">この問題について おしえて</button></div>';
+  return `<div class="fbq"><span>どんなこと？</span>${['wrong', 'meaning', 'fig', 'hard'].map((c) => `<button class="btn btn-line sm" data-act="flag" data-v="${c}">${FB_LABEL[c]}</button>`).join('')}</div>`;
+}
+// 結果画面の「この10問は どうだった？」
+function sessionFbHTML() {
+  const r = sess.rating;
+  let h = `<div class="sec fbbox"><h2>この練習は どうだった？</h2><div class="fbq">${['easy', 'fit', 'tough'].map((c) => `<button class="btn ${r === c ? 'btn-sub' : 'btn-line'} sm" data-act="rate" data-v="${c}" aria-pressed="${r === c}">${FB_LABEL[c]}</button>`).join('')}</div>`;
+  h += sess.commentSent ? '<p class="note" role="status">ひとことを おくりました。ありがとう！</p>' : '<label class="fbtext"><span>ひとこと (なくてもOK): わかりにくかったこと、ふやしてほしい問題など</span><textarea id="fb-text" rows="2" maxlength="300"></textarea></label><div class="fb-actions"><button class="btn btn-line sm" data-act="comment">おくる</button></div>';
+  return h + '</div>';
+}
+// じぶんの記録の「おねがい・アイデア」と「おうちの人に おくる」
+function mineFbHTML() {
+  let h = '<div class="sec fbbox"><h2>アプリへの おねがい・アイデア</h2><p class="note">「こんな問題がほしい」「ここがわかりにくい」など、なんでも書いてね。おうちの人と Claude が読んで、アプリをよくします。</p>';
+  h += ideaSent ? '<p class="note" role="status">おくりました。ありがとう！</p>' : '<label class="fbtext"><textarea id="idea-text" rows="3" maxlength="500"></textarea></label><div class="fb-actions"><button class="btn btn-sub sm" data-act="idea">おくる</button></div>';
+  h += `</div><div class="sec fbbox"><h2>おうちの人に 記録を おくる</h2><p class="note">記録と、おくった声を ファイルにして、AirDrop やメッセージで おうちの人に わたせます。</p><div class="fb-actions"><button class="btn btn-line sm" data-act="sendfile">記録を おくる</button>${shareMsg ? `<span class="pill on" role="status">${shareMsg}</span>` : ''}</div></div>`;
+  return h;
+}
+let ideaSent = false; let shareMsg = '';
+// 記録をファイルにして わたす (端末をこえる受け渡し)
+function payload() {
+  if (!state.deviceId) { state.deviceId = 'd' + Date.now().toString(36) + Math.floor(rnd() * 46656).toString(36); saveLocal(); }
+  const { finger, unlocked, ...rest } = state;
+  return Object.assign({ kind: 'keisan-kiroku', exportedAt: Date.now() }, JSON.parse(JSON.stringify(rest)));
+}
+async function shareRecord() {
+  const d = new Date(); const name = `renshu-kiroku-${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}.json`;
+  const blob = new Blob([JSON.stringify(payload())], { type: 'application/json' });
+  try {
+    const file = new File([blob], name, { type: 'application/json' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: '練習帳の記録' }); shareMsg = 'おくる画面を ひらきました'; render(); return; }
+  } catch (e) { if (e && e.name === 'AbortError') return; }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  shareMsg = 'ファイルを ほぞんしました'; render();
+}
+
+// ===== 保護者ページ: 記録の読みこみ・まとめ =====
+const PARENT_KEY = 'keisan-parent-v1';
+function loadParentStore() { try { return Object.assign({ imports: {}, notes: [], sent: {}, batches: [] }, JSON.parse(localStorage.getItem(PARENT_KEY)) || {}); } catch (e) { return { imports: {}, notes: [], sent: {}, batches: [] }; } }
+let pstore = loadParentStore();
+function saveParentStore() { try { localStorage.setItem(PARENT_KEY, JSON.stringify(pstore)); } catch (e) { /* 保存できない環境 */ } }
+// いくつかの記録 (この端末・読みこんだファイル) を1つにまとめる
+function mergeStates(list) {
+  const srcs = list.filter(Boolean); if (!srcs.length) return freshState();
+  const newest = srcs.slice().sort((a, b) => (b.updatedAt || b.exportedAt || 0) - (a.updatedAt || a.exportedAt || 0))[0];
+  const out = Object.assign(freshState(), JSON.parse(JSON.stringify(newest)));
+  const byId = (key) => { const m = new Map(); srcs.forEach((s) => (s[key] || []).forEach((x) => { if (x && x.id && !m.has(x.id)) m.set(x.id, x); })); return [...m.values()]; };
+  out.sessions = byId('sessions').sort((a, b) => b.endedAt - a.endedAt).slice(0, 200);
+  out.feedback = byId('feedback').sort((a, b) => a.at - b.at);
+  const better = (a, b) => (!a ? b : !b ? a : ((b.medal || 0) * 1e6 + (b.score || 0) + b.c > (a.medal || 0) * 1e6 + (a.score || 0) + a.c ? b : a));
+  out.best = {}; srcs.forEach((s) => Object.entries(s.best || {}).forEach(([k, v]) => { out.best[k] = better(out.best[k], v); }));
+  return out;
+}
+function parentSources() {
+  const local = (() => { try { return migrate(JSON.parse(localStorage.getItem(LS_KEY))); } catch (e) { return null; } })();
+  const hasLocal = local && ((local.sessions || []).length || (local.feedback || []).length);
+  return { local: hasLocal ? local : null, imports: Object.values(pstore.imports) };
+}
+function importFile(file) {
+  const rd = new FileReader();
+  rd.onload = () => {
+    try {
+      const d = JSON.parse(rd.result);
+      if (!d || d.kind !== 'keisan-kiroku' || !Array.isArray(d.sessions)) throw new Error('kind');
+      pstore.imports[d.deviceId || 'import'] = d; saveParentStore();
+      state = mergeStates([parentSources().local, ...Object.values(pstore.imports)]);
+      importMsg = `読みこみました (${fmtDate(d.exportedAt)} の記録、練習 ${d.sessions.length}回・声 ${(d.feedback || []).length}件)`;
+    } catch (e) { importMsg = 'このファイルは読みこめませんでした。「記録を おくる」で作ったファイルを えらんでください。'; }
+    render();
+  };
+  rd.readAsText(file);
+}
+let importMsg = ''; let report = null; let withData = false; let noteMsg = '';
+const NOTE_CATS = ['まちがい・バグ', 'わかりにくい', '追加してほしい', 'むずかしさ', 'その他'];
+const fbCtxText = (c) => [c.stage ? `${c.stage}${c.level ? ` Lv${c.level}` : ''} ${TYPE_NAMES[c.type] || ''}`.trim() : '', c.lesson ? `読みもの「${(LESSONS[c.lesson] || {}).title || c.lesson}」` : '', c.frame ? `${c.frame}/${c.frames || '?'}枚目` : ''].filter(Boolean).join(' ');
+// 記録から自動で見つけること
+function insights(st) {
+  const out = []; const ts = st.typeStats || {};
+  Object.entries(ts).forEach(([t, s]) => { if (s.n >= 5 && s.c / s.n < 0.7) out.push({ k: 'low', s: `正答率が低い: ${TYPE_NAMES[t] || t} (${stageOfType(t)}) ${Math.round(s.c / s.n * 100)}% (${s.n}問)` }); });
+  Object.entries(ts).forEach(([t, s]) => { if (s.n >= 5 && s.hint / s.n >= 0.4) out.push({ k: 'hint', s: `先に しくみを見ることが多い: ${TYPE_NAMES[t] || t} ${Math.round(s.hint / s.n * 100)}%` }); });
+  const ms = {}; (st.sessions || []).forEach((x) => x.items.forEach((i) => { if (i.ok) (ms[i.type] = ms[i.type] || []).push(i.ms); }));
+  Object.entries(ms).forEach(([t, a]) => { if (a.length >= 5) { const avg = a.reduce((x, y) => x + y, 0) / a.length; if (avg > 60000) out.push({ k: 'slow', s: `時間がかかる: ${TYPE_NAMES[t] || t} 正解までの平均 ${fmtSec(avg)}` }); } });
+  const ng = {}; (st.feedback || []).filter((f) => f.kind === 'frame' && f.verdict === 'ng').forEach((f) => { const k = f.ctx.lesson ? `読みもの「${(LESSONS[f.ctx.lesson] || {}).title}」${f.ctx.frame}枚目` : `${TYPE_NAMES[f.ctx.type] || f.ctx.type} の しくみ ${f.ctx.frame}枚目`; ng[k] = (ng[k] || 0) + 1; });
+  Object.entries(ng).sort((a, b) => b[1] - a[1]).forEach(([k, n]) => out.push({ k: 'ng', s: `「わからない」が押された説明: ${k} (${n}回)` }));
+  const tough = {}; (st.feedback || []).filter((f) => f.kind === 'session' && f.verdict === 'tough').forEach((f) => { const k = sessLabel(f.ctx.mode, f.ctx.lv); tough[k] = (tough[k] || 0) + 1; });
+  Object.entries(tough).forEach(([k, n]) => out.push({ k: 'tough', s: `「むずかしい」と答えた練習: ${k} (${n}回)` }));
+  return out;
+}
+function fbLine(f) {
+  const tag = f.kind === 'frame' ? `説明: ${FB_LABEL[f.verdict]}` : f.kind === 'problem' ? `問題へん？: ${FB_LABEL[f.verdict]}` : f.kind === 'session' ? `感想: ${FB_LABEL[f.verdict]}` : f.kind === 'comment' ? 'ひとこと' : 'アイデア';
+  const c = f.ctx || {};
+  const where = f.kind === 'session' || f.kind === 'comment' ? `${sessLabel(c.mode, c.lv)}${c.n ? ` ${c.c}/${c.n}正解` : ''}` : fbCtxText(c);
+  return { tag, where, q: c.q, extra: f.kind === 'frame' ? c.frameText : f.kind === 'problem' ? `答え ${c.answer || ''}${c.given ? ` / 入力 ${c.given}` : ''}` : '', text: f.text };
+}
+function buildReport() {
+  const st = state; const d = new Date(); const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+  const id = `FB-${ymd}-${pstore.batches.filter((b) => b.id.startsWith(`FB-${ymd}`)).length + 1}`;
+  const fbs = (st.feedback || []).filter((f) => !pstore.sent[f.id] && !(f.kind === 'frame' && f.verdict === 'ok'));
+  const oks = (st.feedback || []).filter((f) => !pstore.sent[f.id] && f.kind === 'frame' && f.verdict === 'ok');
+  const notes = pstore.notes.filter((n) => !pstore.sent[n.id]);
+  let t = `# 練習帳フィードバック ${id}\n作成: ${d.toLocaleString('ja-JP')} / アプリ ${APP_VERSION}\n\n## 保護者のメモ (${notes.length})\n`;
+  t += notes.length ? notes.map((n, i) => `- [N${i + 1}][${n.cat}] ${n.text}`).join('\n') : '- なし';
+  t += `\n\n## 娘さんの声 (${fbs.length})\n`;
+  t += fbs.length ? fbs.map((f, i) => { const l = fbLine(f); return `- [F${i + 1}][${l.tag}]${l.where ? ' ' + l.where : ''}${l.q ? ` 問題「${l.q}」` : ''}${l.extra ? ` (${l.extra})` : ''}${l.text ? ` 「${l.text}」` : ''}`; }).join('\n') : '- なし';
+  if (oks.length) t += `\n- (「わかった」${oks.length}件: ${[...new Set(oks.map((f) => fbCtxText(f.ctx)))].slice(0, 8).join('、')})`;
+  const ins = insights(st);
+  t += `\n\n## 記録から自動で見つけたこと\n${ins.length ? ins.map((x) => `- ${x.s}`).join('\n') : '- とくになし'}`;
+  const ss = st.sessions || []; const n = ss.reduce((a, x) => a + x.n, 0), c = ss.reduce((a, x) => a + x.c, 0);
+  const wk = ss.filter((x) => x.endedAt > Date.now() - 7 * 864e5);
+  t += `\n\n## 数字\n- 練習 ${ss.length}回 / ${n}問 / 正答率 ${n ? Math.round(c / n * 100) : 0}%\n- この7日: 練習 ${wk.length}回 / ${wk.reduce((a, x) => a + x.n, 0)}問\n- メダル: ${[3, 2, 1].map((m) => `${MEDAL[m]}${Object.values(st.best || {}).filter((b) => b.medal === m).length}`).join(' ')}`;
+  if (withData) t += `\n\n## 記録データ\n${exportText()}`;
+  return { id, text: t, fbIds: [...fbs, ...oks].map((f) => f.id), noteIds: notes.map((x) => x.id), count: fbs.length + notes.length };
+}
+function inboxHTML() {
+  const src = parentSources(); const st = state;
+  let h = '<section class="parent">';
+  h += `<div><h1 style="font-size:1.6rem">フィードバック</h1><p class="note">娘さんがアプリで押した声と、保護者のメモを まとめて Claude に送ります。</p></div>`;
+  h += figFlow([{ s: '① 娘さん', sub: 'わかった・わからない\nひとこと・アイデア' }, { s: '② 記録を わたす', sub: '同じ端末なら そのまま\nちがう端末は ファイル', cls: 'sh3' }, { s: '③ Claude に送る', sub: 'まとめを スレッドへ\nはりつけ', cls: 'sh2' }, { s: '④ 改善・公開', sub: '「改善の記録」に\nのる' }], { h: 84, W: 860, label: 'フィードバックの流れ' });
+  h += `<div class="sec"><h2>記録の読みこみ</h2><p class="note">見ている記録: ${src.local ? 'この端末の記録' : ''}${src.local && src.imports.length ? ' + ' : ''}${src.imports.map((d) => `ファイル (${fmtDate(d.exportedAt)})`).join('、')}${!src.local && !src.imports.length ? 'まだありません。娘さんの「じぶんの記録 → 記録を おくる」で作ったファイルを読みこんでください。' : ''}</p><div class="fb-actions"><label class="btn btn-line sm filebtn">記録ファイルを読みこむ<input type="file" accept="application/json,.json" data-act="import" hidden></label>${importMsg ? `<span class="pill on" role="status">${esc(importMsg)}</span>` : ''}</div></div>`;
+  const ins = insights(st);
+  h += `<div class="sec"><h2>記録から自動で見つけたこと</h2>${ins.length ? `<ul class="ins">${ins.map((x) => `<li class="${x.k}">${esc(x.s)}</li>`).join('')}</ul>` : '<p class="note">今のところ、とくにありません (5問以上の記録から見つけます)。</p>'}</div>`;
+  const fbs = (st.feedback || []).slice().reverse();
+  h += `<div class="sec"><h2>娘さんの声 (${fbs.length})</h2>`;
+  if (!fbs.length) h += '<p class="note">まだありません。説明の下の「わかった / わからない」、答えたあとの「この問題について おしえて」、結果画面の感想、じぶんの記録の「おねがい・アイデア」から届きます。</p>';
+  else h += '<div class="list">' + fbs.slice(0, 60).map((f) => { const l = fbLine(f); return `<div class="li"><span class="m ${f.verdict === 'ng' || f.kind === 'problem' || f.verdict === 'tough' ? 'ng' : 'ok'}">${f.verdict === 'ok' || f.verdict === 'fit' || f.verdict === 'easy' ? '○' : '!'}</span><span class="qq"><b>${esc(l.tag)}</b> ${esc(l.where)}${l.q ? `<br><small>問題: ${esc(l.q)}</small>` : ''}${l.extra ? `<br><small>${esc(l.extra)}</small>` : ''}${l.text ? `<br>「${esc(l.text)}」` : ''}</span><span class="aa"><small>${fmtDate(f.at)}</small></span><span class="tt">${pstore.sent[f.id] ? `<span class="pill">送信済み ${pstore.sent[f.id]}</span>` : '<span class="pill hot">未送信</span>'}</span></div>`; }).join('') + '</div>';
+  h += '</div>';
+  h += `<div class="sec"><h2>保護者のメモ</h2><div class="noteform"><select id="note-cat">${NOTE_CATS.map((c) => `<option>${c}</option>`).join('')}</select><textarea id="note-text" rows="2" maxlength="1000" placeholder="気づいたこと・直してほしいこと・追加したいこと"></textarea><button class="btn btn-sub sm" data-act="note">メモに追加</button></div>${noteMsg ? `<p class="note" role="status">${noteMsg}</p>` : ''}`;
+  if (pstore.notes.length) h += '<div class="list">' + pstore.notes.slice().reverse().map((n) => `<div class="li"><span class="m">・</span><span class="qq"><b>${esc(n.cat)}</b> ${esc(n.text)}</span><span class="aa"><small>${fmtDate(n.at)}</small></span><span class="tt">${pstore.sent[n.id] ? `<span class="pill">送信済み ${pstore.sent[n.id]}</span>` : `<button class="linkbtn" data-act="delnote" data-v="${n.id}">けす</button>`}</span></div>`).join('') + '</div>';
+  h += '</div>';
+  const unsent = (st.feedback || []).filter((f) => !pstore.sent[f.id] && !(f.kind === 'frame' && f.verdict === 'ok')).length + pstore.notes.filter((n) => !pstore.sent[n.id]).length;
+  h += `<div class="sec fbbox"><h2>Claude に送る</h2><p class="note">未送信の声とメモ <b>${unsent}件</b>、自動で見つけたこと、数字を 1つのまとめにします。「共有」か「コピー」で、プロジェクトのスレッドに はりつけてください。送ったまとめは「改善の記録」で、どう直したかを確かめられます。</p><label class="chk"><input type="checkbox" data-act="withdata" ${withData ? 'checked' : ''}> 記録の全データも付ける (くわしく調べたいとき)</label><div class="fb-actions"><button class="btn btn-main" data-act="mkreport">まとめを作る</button></div>`;
+  if (report) h += `<textarea id="report-box" class="exportbox" rows="10" readonly>${esc(report.text)}</textarea><div class="fb-actions"><button class="btn btn-sub sm" data-act="sharereport">共有</button><button class="btn btn-line sm" data-act="copyreport">コピー</button><button class="btn btn-line sm" data-act="marksent">送ったので「送信済み」にする</button>${report.msg ? `<span class="pill on" role="status">${report.msg}</span>` : ''}</div>`;
+  h += '</div></section>';
+  return h;
+}
+function changesHTML() {
+  let h = '<section class="parent"><div><h1 style="font-size:1.6rem">改善の記録</h1><p class="note">アプリの版ごとに、何を直したか・だれの声からか を まとめています。送ったまとめの番号 (FB-…) が入っていれば、その声への対応です。</p></div>';
+  if (pstore.batches.length) {
+    h += '<div class="sec"><h2>送ったまとめ</h2><div class="list">' + pstore.batches.slice().reverse().map((b) => { const done = CHANGELOG.find((c) => (c.from || []).includes(b.id)); return `<div class="li"><span class="m ${done ? 'ok' : ''}">${done ? '○' : '…'}</span><span class="qq"><b>${b.id}</b> 声とメモ ${b.count}件</span><span class="aa"><small>${fmtDate(b.at)}</small></span><span class="tt">${done ? `<span class="pill on">対応 v${done.v}</span>` : '<span class="pill">Claude の対応待ち</span>'}</span></div>`; }).join('') + '</div></div>';
+  }
+  h += '<div class="sec"><h2>版ごとの変更</h2><div class="clog">' + CHANGELOG.map((c) => `<details ${c === CHANGELOG[0] ? 'open' : ''}><summary><b>v${c.v}</b> <span>${c.date}</span> ${esc(c.title)}</summary><ul>${c.items.map((x) => `<li>${esc(x)}</li>`).join('')}</ul><p class="note">きっかけ: ${(c.from || []).map(esc).join('、') || '—'}</p></details>`).join('') + '</div></div>';
+  return h + '</section>';
+}
 // 読みもの (例: 計算の順番のわけ)。back は もどる先の画面
 let lesson = null; // { id, frame, back, frames }
 function lessonHTML() {
   const L = LESSONS[lesson.id]; const fs = lesson.frames; const f = fs[lesson.frame];
-  return `<section class="lesson"><div class="lesson-head"><h1>${L.title}</h1><button class="btn btn-line" data-act="lback">${lesson.back === 'practice' ? '問題にもどる' : 'はじめの画面へ'}</button></div><div class="explain"><div class="ex-nav"><button class="btn btn-line" data-act="lprev" ${lesson.frame === 0 ? 'disabled' : ''}>まえ</button><button class="btn btn-sub" data-act="lnext" ${lesson.frame >= fs.length - 1 ? 'disabled' : ''}>つぎ</button><span class="count">${lesson.frame + 1} / ${fs.length}</span></div><div class="fig ex-scroll">${f.fig}</div><div class="ex-step">${f.text}</div></div></section>`;
+  return `<section class="lesson"><div class="lesson-head"><h1>${L.title}</h1><button class="btn btn-line" data-act="lback">${lesson.back === 'practice' ? '問題にもどる' : 'はじめの画面へ'}</button></div><div class="explain"><div class="ex-nav"><button class="btn btn-line" data-act="lprev" ${lesson.frame === 0 ? 'disabled' : ''}>まえ</button><button class="btn btn-sub" data-act="lnext" ${lesson.frame >= fs.length - 1 ? 'disabled' : ''}>つぎ</button><span class="count">${lesson.frame + 1} / ${fs.length}</span></div><div class="fig ex-scroll">${f.fig}</div><div class="ex-step">${f.text}</div>${fbFrameHTML(lessonFbKey())}</div></section>`;
 }
 function render() {
   const el = app(); if (!el) return;
@@ -510,8 +693,10 @@ function render() {
   else if (view === 'result') body = resultHTML();
   else if (view === 'lesson') body = lessonHTML();
   else if (view === 'mine') body = mineHTML();
+  else if (view === 'inbox') body = inboxHTML();
+  else if (view === 'changes') body = changesHTML();
   else body = parentHTML();
-  el.innerHTML = `<div class="wrap">${header()}${body}</div>`;
+  el.innerHTML = `<div class="wrap">${header()}${body}${footer()}</div>`;
   if (view === 'practice' && sess.sideTab === 'memo') attachMemo();
 }
 
@@ -583,7 +768,7 @@ document.addEventListener('click', (e) => {
   const b = e.target.closest('[data-act]'); if (!b) return;
   const a = b.dataset.act, v = b.dataset.v;
   if (a === 'tab') { if (view === 'practice' && sess && sess.phase) { finishSession(true); } view = v; confirmReset = false; copyState = null; render(); window.scrollTo(0, 0); }
-  else if (a === 'lesson') { lesson = { id: v, frame: 0, back: view === 'practice' ? 'practice' : 'home', frames: LESSONS[v].frames() }; view = 'lesson'; render(); window.scrollTo(0, 0); }
+  else if (a === 'lesson') { lesson = { id: v, frame: 0, back: view === 'practice' ? 'practice' : 'home', frames: LESSONS[v].frames(), opened: Date.now() }; view = 'lesson'; render(); window.scrollTo(0, 0); }
   else if (a === 'lprev') { lesson.frame = Math.max(0, lesson.frame - 1); render(); }
   else if (a === 'lnext') { lesson.frame = Math.min(lesson.frames.length - 1, lesson.frame + 1); render(); }
   else if (a === 'lback') { view = lesson.back === 'practice' && sess ? 'practice' : 'home'; lesson = null; render(); window.scrollTo(0, 0); }
@@ -608,9 +793,34 @@ document.addEventListener('click', (e) => {
     const manual = () => { copyState = 'manual'; render(); const t = document.getElementById('export-box'); if (t) { t.focus(); t.select(); } };
     try { navigator.clipboard.writeText(txt).then(() => { copyState = 'ok'; render(); }, manual); } catch (err) { manual(); }
   }
+  else if (a === 'fbframe') {
+    if (view === 'lesson') { fbGiven[lessonFbKey()] = v; addFeedback('frame', v, { lesson: lesson.id, frame: lesson.frame + 1, frames: lesson.frames.length, frameText: stripTags(lesson.frames[lesson.frame].text).slice(0, 90) }); }
+    else { fbGiven[practiceFbKey()] = v; addFeedback('frame', v, frameCtx()); }
+    render();
+  }
+  else if (a === 'flagopen') { sess.flagOpen = true; render(); }
+  else if (a === 'flag') { const p = sess.problem; const it = sess.items[sess.items.length - 1] || {}; fbGiven[`q:${sess.id}:${sess.idx}`] = v; addFeedback('problem', v, { type: p.type, stage: p.stage, level: p.level || undefined, q: p.text, answer: p.answerText, given: it.given, ok: it.ok }); render(); }
+  else if (a === 'rate') { const s2 = sess.saved || {}; const ctx = { mode: sess.mode, lv: sess.fixedLv || undefined, c: s2.c, n: s2.n, ms: s2.ms, sessionId: s2.id };
+    if (sess.ratingFb) { sess.ratingFb.verdict = v; sess.ratingFb.at = Date.now(); state.updatedAt = Date.now(); saveLocal(); } else sess.ratingFb = addFeedback('session', v, ctx);
+    sess.rating = v; render(); }
+  else if (a === 'comment') { const t = (document.getElementById('fb-text') || {}).value || ''; if (t.trim()) { const s2 = sess.saved || {}; addFeedback('comment', sess.rating || '', { mode: sess.mode, lv: sess.fixedLv || undefined, c: s2.c, n: s2.n, sessionId: s2.id }, t.trim()); sess.commentSent = true; render(); } }
+  else if (a === 'idea') { const t = (document.getElementById('idea-text') || {}).value || ''; if (t.trim()) { addFeedback('idea', '', {}, t.trim()); ideaSent = true; render(); } }
+  else if (a === 'sendfile') { shareRecord(); }
+  else if (a === 'note') { const t = (document.getElementById('note-text') || {}).value || ''; const cat = (document.getElementById('note-cat') || {}).value || 'その他'; if (t.trim()) { pstore.notes.push({ id: 'n' + Date.now().toString(36), at: Date.now(), cat, text: t.trim() }); saveParentStore(); noteMsg = 'メモに追加しました。'; render(); } }
+  else if (a === 'delnote') { pstore.notes = pstore.notes.filter((n) => n.id !== v); saveParentStore(); render(); }
+  else if (a === 'withdata') { withData = b.checked; report = null; }
+  else if (a === 'mkreport') { report = buildReport(); render(); const t = document.getElementById('report-box'); if (t) t.scrollIntoView({ block: 'center' }); }
+  else if (a === 'sharereport') { if (navigator.share) navigator.share({ title: report.id, text: report.text }).then(() => { report.msg = '共有しました。送ったら「送信済み」にしてください'; render(); }, () => {}); else { report.msg = 'この端末では共有が使えません。コピーしてください'; render(); } }
+  else if (a === 'copyreport') { const ok = () => { report.msg = 'コピーしました。スレッドに はりつけてください'; render(); }; const manual = () => { report.msg = '下の文を選んでコピーしてください'; render(); const t = document.getElementById('report-box'); if (t) { t.focus(); t.select(); } }; try { navigator.clipboard.writeText(report.text).then(ok, manual); } catch (err) { manual(); } }
+  else if (a === 'marksent') { report.fbIds.forEach((id) => { pstore.sent[id] = report.id; }); report.noteIds.forEach((id) => { pstore.sent[id] = report.id; }); pstore.batches.push({ id: report.id, at: Date.now(), count: report.count }); saveParentStore(); report = null; noteMsg = ''; render(); }
   else if (a === 'reset') { confirmReset = true; render(); }
   else if (a === 'reset-no') { confirmReset = false; render(); }
-  else if (a === 'reset-yes') { const keep = state.sessions; const f = state.finger; state = freshState(); state.sessions = keep; state.finger = f; state.updatedAt = Date.now(); saveLocal(); saveRemote(); confirmReset = false; render(); }
+  else if (a === 'reset-yes') {
+    if (PAGE === 'parent') { // この端末の記録だけをリセットし、読みこんだファイルはそのまま
+      const local = parentSources().local; if (local) { const f = freshState(); f.sessions = local.sessions || []; f.feedback = local.feedback || []; f.deviceId = local.deviceId; f.xp = local.xp; f.updatedAt = Date.now(); try { localStorage.setItem(LS_KEY, JSON.stringify(f)); } catch (e) { /* 保存できない */ } }
+      state = mergeStates([parentSources().local, ...Object.values(pstore.imports)]); confirmReset = false; render(); return;
+    }
+    const keep = state.sessions; const fb = state.feedback; const f = state.finger; const dev = state.deviceId; const xp = state.xp; state = freshState(); state.sessions = keep; state.feedback = fb; state.finger = f; state.deviceId = dev; state.xp = xp; state.updatedAt = Date.now(); saveLocal(); saveRemote(); confirmReset = false; render(); }
 });
 document.addEventListener('keydown', (e) => {
   if (view !== 'practice' || !sess) return;
@@ -628,5 +838,7 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) sess.hiddenAt = Date.now();
   else if (sess.hiddenAt) { sess.t0 += Date.now() - sess.hiddenAt; sess.hiddenAt = null; }
 });
+document.addEventListener('change', (e) => { const t = e.target; if (t && t.dataset && t.dataset.act === 'import' && t.files && t.files[0]) importFile(t.files[0]); });
+if (PAGE === 'parent') state = mergeStates([parentSources().local, ...Object.values(pstore.imports)]);
 render();
-initDb();
+if (PAGE !== 'parent') initDb();

@@ -586,10 +586,13 @@ const STAGES = {
   B3: { track: 'B', name: '速さ', types: ['speed'] },
   B4: { track: 'B', name: '単位量あたり', types: ['per_unit', 'per_total', 'compare'] },
   B5: { track: 'B', name: '単位も計算する (密度など)', types: ['unit_of', 'unit_check', 'density'] },
+  C1: { track: 'C', name: 'お金の計算 (おつり・消費税・割引き)', types: ['m_change', 'm_tax', 'm_discount'] },
+  C2: { track: 'C', name: 'ねだんの決まり方 (仕入れ・お得)', types: ['m_cost', 'm_value'] },
+  C3: { track: 'C', name: '通貨と利息 (為替・ためる)', types: ['m_fx', 'm_interest'] },
 };
 for (const st of Object.values(STAGES)) if (st.levels) st.types = [...new Set(Object.values(st.levels).flatMap((l) => l.types))];
 const LEVEL_RAMP = [1, 1, 2, 2, 3, 3, 4, 4, 5, 5]; // 10問の何問目がどのレベルか
-const TRACKS = { A: { name: '計算のしくみ', stages: ['A1', 'A2', 'A3', 'A4'] }, B: { name: '単位と速さ', stages: ['B1', 'B2', 'B3', 'B4', 'B5'] } };
+const TRACKS = { A: { name: '計算のしくみ', stages: ['A1', 'A2', 'A3', 'A4'] }, B: { name: '単位と速さ', stages: ['B1', 'B2', 'B3', 'B4', 'B5'] }, C: { name: 'お金とくらし', stages: ['C1', 'C2', 'C3'] } };
 const TYPE_NAMES = {
   int_add: '整数のたし算', int_sub: '整数のひき算', int_mul: '整数のかけ算', int_div: '整数のわり算', mental: '暗算のくふう',
   dec_add: '小数のたし算', dec_sub: '小数のひき算', dec_mul: '小数のかけ算', dec_div: '小数のわり算',
@@ -598,6 +601,7 @@ const TYPE_NAMES = {
   conv: '単位のかんさん', time_mix: '時間の組み合わせ', len_mix: '長さ・重さの組み合わせ', speed_conv: '速さの単位',
   speed: '速さの問題', per_unit: '1あたりを求める', per_total: '1あたりから求める', compare: 'くらべる',
   unit_of: '答えの単位', unit_check: '単位で式をたしかめる', density: '密度',
+  m_change: 'おつり', m_tax: '消費税', m_discount: '割引き', m_cost: 'ねだんの内わけ・仕入れ', m_value: 'お得をくらべる', m_fx: '為替 (円とドル)', m_interest: '利息',
 };
 const stageOfType = (t) => Object.keys(STAGES).find((s) => STAGES[s].types.includes(t));
 // あるステップ・レベルで出せる種類
@@ -1634,6 +1638,225 @@ function unitWhyFrames() {
   ];
 }
 
+// ===== お金とくらし =====
+// 制度や相場の数字は「例」。消費税は 2026年時点の制度 (標準 10%、食料品など 8%) を前提にしている。変わったら MONEY_FACTS を直す
+const MONEY_FACTS = { taxStd: 10, taxFood: 8, rates: { ドル: [140, 145, 150, 155, 160], ユーロ: [160, 165, 170] } };
+const yen = (n) => `${Fr.of(n).isInt() ? Fr.of(n).n.toLocaleString('ja-JP') : Fr.of(n).toDec()}円`;
+// 箱を矢印でつなぐ図: steps = [{s, sub, cls}]
+function figFlow(steps, o = {}) {
+  const W = o.W || 540, n = steps.length, gap = o.arrows ? 56 : 30, bw = (W - 20 - gap * (n - 1)) / n, y = 24, bh = o.h || 70;
+  let b = '';
+  steps.forEach((st, i) => {
+    const x = 10 + i * (bw + gap);
+    b += `<rect class="${st.cls || 'sh'}" x="${r1(x)}" y="${y}" width="${r1(bw)}" height="${bh}" rx="10"/>` + svgText(x + bw / 2, y + (st.sub ? 30 : bh / 2 + 6), st.s, 'b');
+    if (st.sub) String(st.sub).split('\n').forEach((line, k) => { b += svgText(x + bw / 2, y + 50 + k * 16, line, 's'); });
+    if (i < n - 1) { const xa = x + bw + 4, xb = x + bw + gap - 4, ym = y + bh / 2; b += `<path class="ac" d="M${r1(xa)} ${ym} L${r1(xb)} ${ym} m-7 -6 l7 6 l-7 6"/>`; if (o.arrows && o.arrows[i]) b += svgText((xa + xb) / 2, ym - 10, o.arrows[i], 's'); }
+  });
+  if (o.back) { const x1 = 10 + bw / 2, x2 = 10 + (n - 1) * (bw + gap) + bw / 2, yb = y + bh + 8; b += `<path class="ac" d="M${r1(x2)} ${yb} L${r1(x2)} ${yb + 18} L${r1(x1)} ${yb + 18} L${r1(x1)} ${yb} m-6 7 l6 -7 l6 7"/>` + svgText((x1 + x2) / 2, yb + 34, o.back, 's'); }
+  return svgBox(W, y + bh + (o.back ? 52 : 12), b, o.label || '流れの図');
+}
+// ほしい人と 売りたい量 (需要と供給) のグラフ。shift: 'demand' ならほしい人がふえた
+function figSupplyDemand(shift) {
+  const W = 540, x0 = 80, y0 = 20, w = 360, h = 200; let b = '';
+  b += `<line class="ln" x1="${x0}" y1="${y0}" x2="${x0}" y2="${y0 + h}"/><line class="ln" x1="${x0}" y1="${y0 + h}" x2="${x0 + w}" y2="${y0 + h}"/>`;
+  b += svgText(x0 - 8, y0 + 10, 'ねだん', 's', 'end') + svgText(x0 - 8, y0 + 26, '高い', 's', 'end') + svgText(x0 - 8, y0 + h - 4, '安い', 's', 'end') + svgText(x0 + w, y0 + h + 20, '数 (多い →)', 's', 'end');
+  b += `<line class="ac" x1="${x0 + 20}" y1="${y0 + 20}" x2="${x0 + w - 40}" y2="${y0 + h - 20}"/>` + svgText(x0 + 24, y0 + 16, 'ほしい人の数', 'm', 'start');
+  b += `<line class="sh3ln" x1="${x0 + 20}" y1="${y0 + h - 20}" x2="${x0 + w - 40}" y2="${y0 + 20}"/>` + svgText(x0 + w - 36, y0 + 16, '売りたい数', 'b', 'end');
+  const cx = x0 + (w - 20) / 2, cy = y0 + h / 2;
+  b += `<circle class="dot" cx="${cx}" cy="${cy}" r="6"/>` + svgText(cx - 14, cy + 5, 'ここで ねだんが決まる', 's', 'end');
+  if (shift === 'demand') { b += `<line class="ac dash2" x1="${x0 + 80}" y1="${y0 + 20}" x2="${x0 + w}" y2="${y0 + h - 20}"/>`; b += `<circle class="dot" cx="${cx + 30}" cy="${cy - 30}" r="6"/>` + svgText(cx + 40, cy - 36, 'ほしい人がふえると 高くなる', 'm', 'start'); }
+  return svgBox(W, y0 + h + 30, b, 'ほしい人の数と売りたい数の図');
+}
+GEN.m_change = () => {
+  const goods = [['ノート', 120, 180], ['えんぴつ', 60, 98], ['おにぎり', 110, 160], ['ジュース', 120, 150], ['パン', 130, 240], ['けしゴム', 80, 110], ['シール', 150, 300]];
+  const n = ri(2, 3); const its = shuffle(goods).slice(0, n).map(([g, a, z]) => [g, ri(a, z)]);
+  const tot = its.reduce((s, x) => s + x[1], 0); const pay = [500, 1000, 2000, 5000].find((p) => p >= tot + 1);
+  const ch = pay - tot;
+  const list = its.map(([g, p]) => `${g} ${p}円`).join('、');
+  const up = []; let cur = tot; // おつりを「たして数える」とび
+  const nx10 = Math.ceil(cur / 10) * 10; if (nx10 !== cur) { up.push({ a: cur, b: nx10, s: `+${nx10 - cur}` }); cur = nx10; }
+  const nx100 = Math.ceil(cur / 100) * 100; if (nx100 !== cur && nx100 <= pay) { up.push({ a: cur, b: nx100, s: `+${nx100 - cur}` }); cur = nx100; }
+  if (cur !== pay) up.push({ a: cur, b: pay, s: `+${pay - cur}` });
+  const tape = figTapes([{ s: 'はらった', segs: [{ w: pay, s: `${pay}円`, cls: 'sh3' }] }, { s: '内わけ', segs: [...its.map(([g, p]) => ({ w: p, s: p >= pay * 0.12 ? `${g}` : '' })), { w: ch, s: 'おつり', cls: 'sh2' }], braces: [{ from: 0, to: its.length - 1, s: `代金 ${tot}円`, side: 'bot' }] }], { label: 'はらったお金と代金・おつりのテープ図' });
+  return { html: `${list} を買って、${pay}円 はらいました。おつりは <b class="box">□</b> 円`, text: `${list} を ${pay}円で → おつり□円`, slots: [slot(ch, '円')],
+    explain: () => [
+      { fig: tape, text: `はらった ${pay}円 は、代金 と おつり に分かれます。だから おつり = はらったお金 − 代金。<br>まず代金: ${its.map((x) => x[1]).join(' + ')} = <b>${tot}円</b>` },
+      { fig: figNumberLine({ min: Math.floor(tot / 100) * 100, max: pay, marks: [{ v: tot, s: `${tot}` }, { v: pay, s: `${pay}` }, ...up.slice(0, -1).map((u) => ({ v: u.b, s: String(u.b) }))], jumps: up, label: '代金からはらったお金まで数える数直線' }),
+        text: `お店の人は、代金から はらったお金まで「たして」数えることがあります: ${up.map((u) => u.s.replace('+', '')).join(' + ')} = <b>${ch}円</b>。<br>ひき算 ${pay} − ${tot} = ${ch} と同じ答えになります。` },
+    ] };
+};
+GEN.m_tax = () => {
+  const food = rnd() < 0.5; const r = food ? MONEY_FACTS.taxFood : MONEY_FACTS.taxStd; const step = food ? 25 : 10;
+  const P = ri(4, 120) * step; const T = P * (100 + r) / 100; const what = food ? pick(['おべんとう', 'お米', 'くだもの', 'おかし']) : pick(['くつ', 'ぼうし', 'かさ', 'ゲーム', 'ふでばこ']);
+  const note = `<small>消費税は、多くの物は ${MONEY_FACTS.taxStd}%、食べ物 (店で食べる外食などはのぞく) は ${MONEY_FACTS.taxFood}% です (このアプリを作った時点のしくみ。かわることがあります)。</small>`;
+  const tape = (ask) => figTapes([{ s: '税こみ', segs: [{ w: 100, s: `税ぬき ${ask === 'P' ? '□' : P}円 (100%)` }, { w: r * 2.2, s: `税 ${r}%`, cls: 'sh2' }], total: ask === 'T' ? '□円' : `${T}円` }], { label: '税ぬきと消費税のテープ図' });
+  const dl = (ask) => figDoubleLine({ top: '金額 (円)', bot: '割合', cols: [{ pos: 0, t: '0', b: '0%' }, { pos: 100, t: String(P), b: '100%', ut: ask === 'P' }, { pos: 100 + r, t: String(T), b: `${100 + r}%`, ut: ask === 'T' }], arrows: [{ from: 100, to: 100 + r, s: ask === 'T' ? `×${1 + r / 100}` : `÷${1 + r / 100}`, side: 'bot' }], label: '金額と割合の二本の数直線' });
+  if (rnd() < 0.6) return { html: `税ぬき ${P}円 の${what}。消費税 ${r}% をたした ねだんは <b class="box">□</b> 円`, text: `税ぬき${P}円 + 消費税${r}% → □円`, slots: [slot(T, '円')],
+    explain: () => [
+      { fig: tape('T'), text: `税こみのねだん = 税ぬきのねだん (100%) + 消費税 (${r}%)。ぜんぶで <b>${100 + r}%</b> です。<br>${note}` },
+      { fig: dl('T'), text: `${100 + r}% は 小数で ${1 + r / 100}。だから ${P} × ${1 + r / 100} = <b>${T}円</b><br><small>べつの考え方: 税は ${P} × ${r / 100} = ${P * r / 100}円。${P} + ${P * r / 100} = ${T}円</small>` },
+      { fig: ueq([['単位の式', `${uqHTML(uq(P, '円'))}${uop('×')}${1 + r / 100}${uop('=')}${uqHTML(uq(T, '円'))}`, 'all']], '割合は 単位のない数'), text: `割合 (${1 + r / 100}) には単位がないので、円 × 割合 は 円 のままです。` },
+    ] };
+  return { html: `消費税 ${r}% をふくめて ${T}円 の${what}。税ぬきのねだんは <b class="box">□</b> 円`, text: `税こみ${T}円 (${r}%) → 税ぬき□円`, slots: [slot(P, '円')],
+    explain: () => [
+      { fig: tape('P'), text: `税こみの ${T}円 が ${100 + r}% にあたります。100% (税ぬき) を求めます。<br>${note}` },
+      { fig: dl('P'), text: `${100 + r}% → 100% にもどすので、${T} ÷ ${1 + r / 100} = <b>${P}円</b><br><small>よくあるまちがい: ${T} から ${r}% を ひく (${T} × ${1 - r / 100}) と、${T * (100 - r) / 100}円 になって合いません。もとにする量 (100%) が ちがうからです。</small>` },
+    ] };
+};
+GEN.m_discount = () => {
+  const v = ri(0, 1); const P = ri(6, 60) * 100;
+  if (v === 0) { const k = ri(1, 5); const S = P * (10 - k) / 10;
+    return { html: `定価 ${P}円 の品物が ${k}割引き。ねだんは <b class="box">□</b> 円`, text: `${P}円の${k}割引き → □円`, slots: [slot(S, '円')],
+      explain: () => [
+        { fig: figTapes([{ s: '定価', segs: Array.from({ length: 10 }, (_, i) => ({ w: 1, s: i < 10 - k ? '1割' : '1割', cls: i < 10 - k ? 'sh' : 'sh2' })), braces: [{ from: 10 - k, to: 9, s: `${k}割 ひく` }, { from: 0, to: 9 - k, s: `のこり ${10 - k}割`, side: 'bot' }] }], { label: '定価を10に分けたテープ図' }),
+          text: `1割 は 全体を 10こに分けた 1つ分 (0.1)。定価 ${P}円 の 1割は ${P / 10}円。<br>${k}割引き は、${k}割 をひいた のこり <b>${10 - k}割</b> をはらうことです。` },
+        { fig: ueq([['のこりで考える', `${P} × ${(10 - k) / 10} = <b>${S}</b>`], ['ひいて考える', `${P} − ${P} × ${k / 10} = ${P} − ${P * k / 10} = <b>${S}</b>`]], '2つの考え方'), text: `どちらでも ${S}円。のこりの割合 (${(10 - k) / 10}) をかけると 1回で計算できます。` },
+      ] }; }
+  const p = pick([10, 15, 20, 25, 30, 40]); const S = P * (100 - p) / 100;
+  return { html: `${P}円 の品物が ${p}%引き。ねだんは <b class="box">□</b> 円`, text: `${P}円の${p}%引き → □円`, slots: [slot(S, '円')],
+    explain: () => [
+      { fig: figDoubleLine({ top: '金額 (円)', bot: '割合', cols: [{ pos: 0, t: '0', b: '0%' }, { pos: 100 - p, t: String(S), b: `${100 - p}%`, ut: true }, { pos: 100, t: String(P), b: '100%' }], arrows: [{ from: 100, to: 100 - p, s: `×${(100 - p) / 100}`, side: 'bot' }], label: '割引きの二本の数直線' }),
+        text: `% (パーセント) は 100 をもとにした割合。${p}%引き なら、はらうのは <b>${100 - p}%</b> = ${(100 - p) / 100}。<br>${P} × ${(100 - p) / 100} = <b>${S}円</b>` },
+      { fig: figTable(['', '%', '小数', '割'], [['ひく分', `${p}%`, String(p / 100), `${p / 10}割`], ['はらう分', `${100 - p}%`, String((100 - p) / 100), `${(100 - p) / 10}割`], ['定価', '100%', '1', '10割']]),
+        text: `% と 小数 と 割 は、同じ割合の ちがう書き方です。${p}% = ${p / 100} = ${p / 10}割。` },
+    ] };
+};
+GEN.m_cost = () => {
+  if (rnd() < 0.5) {
+    const parts = [['材料', ri(3, 9) * 10], ['作る人の きゅうりょう', ri(2, 6) * 10], ['運ぶ・お店の 電気など', ri(1, 4) * 10], ['お店の もうけ', ri(1, 4) * 10]];
+    const what = pick(['パン 1こ', 'ケーキ 1こ', 'おべんとう 1こ', 'ノート 1さつ']); const P = parts.reduce((s, x) => s + x[1], 0);
+    return { html: `${what} のねだんの 内わけ (例): ${parts.map(([a, b]) => `${a} ${b}円`).join('、')}。税ぬきのねだんは <b class="box">□</b> 円`, text: `${what}の内わけ → □円`, slots: [slot(P, '円')],
+      explain: () => [{ fig: figTapes([{ s: 'ねだん', segs: parts.map(([a, b], i) => ({ w: b, s: b >= 20 ? a.split(' ')[0] : '', cls: ['sh', 'sh3', 'sh', 'sh2'][i] })), total: `${P}円` }], { label: 'ねだんの内わけのテープ図' }) + figTable(['', '円'], parts.map(([a, b]) => [a, b]).concat([['合計 (ねだん)', `<b>${P}</b>`]]), { sumRow: parts.length }),
+        text: `ねだんには、材料だけでなく、作る人の きゅうりょう、運ぶお金、お店をひらくお金、そして もうけ が入っています。ぜんぶたすと <b>${P}円</b>。<br><small>数字は説明のための例です。</small>`, lesson: 'price' }] };
+  }
+  const C = ri(4, 30) * 20; const r = pick([20, 25, 30, 40, 50]); const P = C * (100 + r) / 100;
+  return { html: `${C}円 で仕入れた品物に、仕入れねの ${r}% のもうけをのせて 定価をつけます。定価は <b class="box">□</b> 円`, text: `仕入れ${C}円 + もうけ${r}% → 定価□円`, slots: [slot(P, '円')],
+    explain: () => [
+      { fig: figTapes([{ s: '定価', segs: [{ w: 100, s: `仕入れね ${C}円 (100%)` }, { w: r, s: `もうけ ${r}%`, cls: 'sh2' }], total: '□円' }], { label: '仕入れねともうけのテープ図' }),
+        text: `お店は 品物を ${C}円 で仕入れて (買って)、それより高く売って もうけを出します。もとにするのは 仕入れね (100%)。定価は ${100 + r}% にあたります。`, lesson: 'price' },
+      { fig: figDoubleLine({ top: '金額 (円)', bot: '割合', cols: [{ pos: 0, t: '0', b: '0%' }, { pos: 100, t: String(C), b: '100%' }, { pos: 100 + r, t: String(P), b: `${100 + r}%`, ut: true }], arrows: [{ from: 100, to: 100 + r, s: `×${(100 + r) / 100}`, side: 'bot' }], label: '仕入れねと定価の二本の数直線' }),
+        text: `${C} × ${(100 + r) / 100} = <b>${P}円</b>。もうけは ${P} − ${C} = ${P - C}円 です。` },
+    ] };
+};
+GEN.m_value = () => {
+  if (rnd() < 0.5) {
+    let a, b, pa, pb, ua, ub;
+    do { a = pick([200, 300, 400, 500]); b = pick([300, 500, 600, 800, 1000]); ua = ri(10, 30) * 10; ub = ri(10, 30) * 10; pa = a / 100 * ua; pb = b / 100 * ub; } while (a === b || ua === ub || !Number.isInteger(pa) || !Number.isInteger(pb));
+    const what = pick(['お米', 'ぶた肉', 'コーヒー豆', 'チーズ']); const ans = ua < ub ? 'A' : 'B';
+    return { html: `${what} A: ${a} g で ${pa}円<br>${what} B: ${b} g で ${pb}円`, text: `A:${a}g${pa}円 / B:${b}g${pb}円`, lead: '100 g あたりが安いのはどっち？', choices: [{ id: 'A', html: 'A' }, { id: 'B', html: 'B' }], answerChoice: ans, slots: [],
+      explain: () => [
+        { fig: figTable(['', '重さ', '代金', '100 g あたり'], [['A', `${a} g`, `${pa}円`, `<b>${ua}円</b>`], ['B', `${b} g`, `${pb}円`, `<b>${ub}円</b>`]]) + figBars([{ s: 'A', v: ua, label: String(ua) }, { s: 'B', v: ub, label: String(ub), cls: 'sh3' }], ' 円/100g'),
+          text: `量がちがうと、代金だけでは くらべられません。「100 g あたり」に そろえます。<br>A: ${pa} ÷ ${a / 100} = ${ua}円、B: ${pb} ÷ ${b / 100} = ${ub}円。安いのは <b>${ans}</b>。` },
+        { fig: ueq([['A', `${uqHTML(uq(pa, '円'))}${uop('÷')}${uqHTML(uq(a, 'g'))}${uop('=')}${uqHTML(uq(ua, '円', 100, 'g'))}`, 'all'], ['B', `${uqHTML(uq(pb, '円'))}${uop('÷')}${uqHTML(uq(b, 'g'))}${uop('=')}${uqHTML(uq(ub, '円', 100, 'g'))}`, 'all']], 'どちらも 円/100g にそろえる'),
+          text: `単位を そろえると くらべられます。円 ÷ g で「1 g あたり」、それを 100倍して「100 g あたり」(円/100g) にしました。`, lesson: 'price' },
+      ] };
+  }
+  const one = ri(10, 25) * 10; const k = pick([3, 4, 5, 6]); const pack = one * k - ri(1, 4) * 10 * (k - 1); const save = one * k - pack;
+  return { html: `1こ ${one}円 のヨーグルト。${k}こパックは ${pack}円 です。${k}こ ほしいとき、パックのほうが <b class="box">□</b> 円 安い`, text: `1こ${one}円 / ${k}こ${pack}円 → □円安い`, slots: [slot(save, '円')],
+    explain: () => [
+      { fig: figTapes([{ s: 'ばらで', segs: Array.from({ length: k }, () => ({ w: one, s: String(one) })), total: `${one * k}円` }, { s: 'パック', segs: [{ w: pack, s: `${pack}`, cls: 'sh3' }, { w: save, s: '', cls: 'cut' }], total: `${pack}円` }], { label: 'ばら買いとパックのテープ図' }),
+        text: `ばらで ${k}こ: ${one} × ${k} = ${one * k}円。パック: ${pack}円。<br>${one * k} − ${pack} = <b>${save}円</b> 安くなります。1こあたりでは ${pack} ÷ ${k} = ${new Fr(pack, k).terminating() ? new Fr(pack, k).toDec() : '約' + Math.round(pack / k)}円 です。<br><small>まとめて売ると、お店は 運ぶ手間や包む手間が へるので、安くできることがあります。ただし、食べきれないと 安く買っても むだになります。</small>`, lesson: 'price' },
+    ] };
+};
+GEN.m_fx = () => {
+  const v = ri(0, 2); const cur = rnd() < 0.75 ? 'ドル' : 'ユーロ'; const R = pick(MONEY_FACTS.rates[cur]); const sym = cur === 'ドル' ? '$' : '€';
+  const note = `<small>1${cur} が何円かを「為替レート」といいます。ほんとうのレートは毎日かわるので、ここの数字は例です。</small>`;
+  if (v === 0) { const X = ri(2, 40) * 5; const Y = X * R;
+    return { html: `1${cur} = ${R}円 のとき、${X}${cur} (${sym}${X}) は <b class="box">□</b> 円`, text: `1${cur}=${R}円で ${X}${cur} → □円`, slots: [slot(Y, '円')],
+      explain: () => [
+        { fig: rateFig('円', cur, [{ pos: 1, t: String(R), b: '1' }, { pos: X, t: Y.toLocaleString('ja-JP'), b: String(X), ut: true }]), text: `1${cur} が ${R}円。${X}${cur} は その ${X}こ分なので、${R} × ${X} = <b>${Y.toLocaleString('ja-JP')}円</b><br>${note}`, lesson: 'currency' },
+        { fig: ueq([['単位の式', `${mulChain([uq(X, cur), uq(R, '円', 1, cur)])}${uop('=')}${uqHTML(uq(Y, '円'))}`, 'all']], '単位で たしかめる'), text: `レートは「1${cur} あたり何円」という 1あたりの量 (円/${cur})。${cur} が消えて 円 がのこります。` },
+      ] }; }
+  if (v === 1) { const X = ri(2, 40) * 5; const Y = X * R;
+    return { html: `1${cur} = ${R}円 のとき、${Y.toLocaleString('ja-JP')}円 を ${cur} にかえると <b class="box">□</b> ${cur}`, text: `1${cur}=${R}円で ${Y}円 → □${cur}`, slots: [slot(X, cur)],
+      explain: () => [
+        { fig: rateFig('円', cur, [{ pos: 1, t: String(R), b: '1' }, { pos: X, t: Y.toLocaleString('ja-JP'), b: String(X), ub: true }]), text: `${R}円 で 1${cur}。${Y.toLocaleString('ja-JP')}円 の中に ${R}円 が いくつあるか: ${Y} ÷ ${R} = <b>${X}${cur}</b><br>${note}`, lesson: 'currency' },
+        { fig: ueq([['単位の式', `${uqHTML(uq(Y, '円'))}${uop('÷')}${uqHTML(uq(R, '円', 1, cur))}${uop('=')}${mulChain([uq(Y, '円'), uq(1, cur, R, '円')])}${uop('=')}${uqHTML(uq(X, cur))}`, 'all']], '単位で たしかめる'), text: `円/${cur} でわるのは、${cur}/円 をかけるのと同じ。円 が消えて ${cur} がのこります。` },
+      ] }; }
+  const a = pick([150, 145, 140]); const d = pick([10, 20, 30]); const up = rnd() < 0.5; const b = up ? a + d : a - d; const ans = up ? 'yasu' : 'taka';
+  return { html: `1ドル = ${a}円 だったのが、1ドル = ${b}円 になりました。`, text: `1ドル${a}円 → ${b}円`, lead: 'これは 円高？ 円安？', choices: [{ id: 'taka', html: '円高' }, { id: 'yasu', html: '円安' }], answerChoice: ans, slots: [],
+    explain: () => [
+      { fig: figTapes([{ s: `前 (1ドル)`, segs: [{ w: a, s: `${a}円` }] }, { s: `今 (1ドル)`, segs: [{ w: b, s: `${b}円`, cls: up ? 'sh2' : 'sh3' }] }], { label: '1ドルを買うのに必要な円のテープ図' }),
+        text: `同じ 1ドル を手に入れるのに、前は ${a}円、今は ${b}円 必要です。<br>${up ? `前より 多くの円 が必要 → 円の 力 (ねうち) が 下がった → <b>円安</b>` : `前より 少ない円 ですむ → 円の 力 (ねうち) が 上がった → <b>円高</b>`}。<br><small>数字 (${a} → ${b}) が ${up ? '大きく' : '小さく'}なったのに「円${up ? '安' : '高'}」なので、まちがえやすいところです。</small>`, lesson: 'currency' },
+      { fig: figTable(['', '円高 (1ドル が 少ない円で買える)', '円安 (1ドル に 多くの円がいる)'], [['外国へ旅行', 'とくになりやすい', 'そんになりやすい'], ['外国から買う物 (輸入)', '安くなりやすい', '高くなりやすい'], ['外国へ売る会社 (輸出)', 'もうけが へりやすい', 'もうけが ふえやすい']]),
+        text: '円高・円安は、どちらが よい・わるい ではなく、立場によって とく・そん が ちがいます。' },
+    ] };
+};
+GEN.m_interest = () => {
+  const P = pick([10000, 20000, 50000, 100000]); const r = pick([1, 2, 3, 5]);
+  if (rnd() < 0.6) { const n = ri(1, 3); const I = P * r / 100 * n;
+    return { html: `${P.toLocaleString('ja-JP')}円 を、1年に ${r}% の利息がつく 銀行に あずけます。${n}年 で つく利息は <b class="box">□</b> 円 (毎年 はじめの ${P.toLocaleString('ja-JP')}円 にだけ 利息がつくとします)`, text: `${P}円 年${r}% ${n}年 (単利) → 利息□円`, slots: [slot(I, '円')],
+      explain: () => [
+        { fig: figFlow([{ s: 'あずける人', sub: `${P.toLocaleString('ja-JP')}円\nあずける` }, { s: '銀行', sub: 'お金を\nかしだす', cls: 'sh3' }, { s: 'かりる人・会社', sub: '利息をつけて\nかえす' }], { arrows: ['あずける', 'かす'], back: '利息の一部が、あずけた人にも わたる', label: '銀行のお金の流れ' }),
+          text: '銀行は、あずかったお金を 家や会社に かして、利息をつけて かえしてもらいます。その利息の一部が、あずけた人への 利息になります。', lesson: 'savings' },
+        { fig: figTapes(Array.from({ length: n }, (_, i) => ({ s: `${i + 1}年目`, segs: [{ w: 100, s: `${P.toLocaleString('ja-JP')}円` }, { w: r * 6, s: `+${(P * r / 100).toLocaleString('ja-JP')}`, cls: 'sh2' }] })), { label: '毎年の利息のテープ図' }),
+          text: `1年の利息は ${P.toLocaleString('ja-JP')} × ${r / 100} = ${(P * r / 100).toLocaleString('ja-JP')}円。${n}年 なら × ${n} で <b>${I.toLocaleString('ja-JP')}円</b>。<br><small>本当の 預金の利息は、税金が ひかれたり、利率が もっと低かったりします。数字は例です。</small>` },
+      ] }; }
+  const r2 = pick([5, 10]); const A1 = P * (100 + r2) / 100, A2 = A1 * (100 + r2) / 100;
+  return { html: `${P.toLocaleString('ja-JP')}円 を 1年に ${r2}% ふえる方法で 2年 おきます。1年目の利息にも 次の年は 利息がつきます。2年後は <b class="box">□</b> 円`, text: `${P}円 年${r2}% 2年 (複利) → □円`, slots: [slot(A2, '円')],
+    explain: () => [
+      { fig: figTapes([{ s: 'はじめ', segs: [{ w: P, s: P.toLocaleString('ja-JP') }] }, { s: '1年後', segs: [{ w: P, s: P.toLocaleString('ja-JP') }, { w: A1 - P, s: `+${(A1 - P).toLocaleString('ja-JP')}`, cls: 'sh2' }] }, { s: '2年後', segs: [{ w: A1, s: A1.toLocaleString('ja-JP') }, { w: A2 - A1, s: `+${(A2 - A1).toLocaleString('ja-JP')}`, cls: 'sh2' }] }], { label: '利息に利息がつくテープ図' }),
+        text: `1年後: ${P.toLocaleString('ja-JP')} × ${1 + r2 / 100} = ${A1.toLocaleString('ja-JP')}円。<br>2年後は この ${A1.toLocaleString('ja-JP')}円 全体が もとになる: × ${1 + r2 / 100} = <b>${A2.toLocaleString('ja-JP')}円</b>。<br>2年目の利息 (${(A2 - A1).toLocaleString('ja-JP')}円) が 1年目 (${(A1 - P).toLocaleString('ja-JP')}円) より多いのは、利息にも利息がつくからです (複利)。<br><small>お金を かりるときも 同じしくみで、返すのがおくれるほど 利息がふえます。</small>`, lesson: 'savings' },
+    ] };
+};
+function moneyWhatFrames() {
+  return [
+    { fig: figTable(['持っている物', 'ほしい物'], [['さかな', 'パン'], ['パン', 'くつ'], ['くつ', 'さかな']]),
+      text: '<b>お金がなかったら？</b><br>むかしは 物と物を とりかえる「物々交換」をしていました。でも、さかなを持っている人が パンをほしくても、パン屋さんが ほしいのは くつ…。<br>おたがいに ほしい物が ぴったり合う相手を さがすのは、とても たいへんです。' },
+    { fig: figFlow([{ s: 'さかな', sub: '売る' }, { s: 'お金', cls: 'sh3' }, { s: 'パン', sub: '買う' }], { arrows: ['→', '→'], label: 'お金をなかだちにする交換' }),
+      text: '<b>お金が「なかだち」をする</b><br>さかなを いったん お金にかえておけば、そのお金で だれからでも パンが買えます。お金は、だれとでも 交換できる 道具です。' },
+    { fig: figFlow([{ s: '交換する', sub: '物やサービスと\nとりかえる' }, { s: 'ねうちを はかる', sub: 'ねだんで\nくらべられる', cls: 'sh3' }, { s: 'ためておく', sub: 'くさらずに\nとっておける', cls: 'sh2' }], { label: 'お金の3つのやくわり' }),
+      text: '<b>お金の 3つのやくわり</b><br>① 交換する: 物やサービスと とりかえる。<br>② ねうちを はかる: 「120円」のように、ちがう物どうしの ねうちを 同じものさしで くらべられる (単位の「円」と同じ考え方です)。<br>③ ためておく: さかなは くさるけれど、お金は とっておいて あとで使えます。' },
+    { fig: figTable(['', 'つくるところ', 'れい'], [['お札 (紙へい)', '日本銀行が発行', '1万円・5千円・千円 など'], ['こうか (コイン)', '国 (政府) が発行', '500円・100円・10円 など'], ['電子マネー・カード', 'お金のデータを やりとり', 'ICカード・スマホ']]),
+      text: '<b>お金の いろいろな形</b><br>日本のお札は 日本銀行、コインは 国が発行しています。お札の紙そのものの ねうちは 小さいのに 1万円として使えるのは、「みんなが 1万円として うけとる」と 信じているから (信用) です。<br>電子マネーは、目に見えなくても 同じ「円」のデータを やりとりしています。' },
+    { fig: figFlow([{ s: '家', sub: 'はたらいて\nきゅうりょう' }, { s: 'お店・会社', sub: '物を売って\nもうける', cls: 'sh3' }, { s: '国・市', sub: '税金で 学校や\n道路をつくる', cls: 'sh2' }], { arrows: ['買い物', '税金'], back: 'お金は ぐるぐる めぐっている', label: 'お金のめぐり' }),
+      text: '<b>お金は めぐっている</b><br>家の人は はたらいて きゅうりょうをもらい、買い物をします。お店や会社は そのお金で きゅうりょうを はらいます。消費税などの 税金は、学校・道路・病院など みんなのために使われます。' },
+  ];
+}
+function priceFrames() {
+  const parts = [['材料', 60, 'sh'], ['作る人の きゅうりょう', 50, 'sh3'], ['運ぶ・店の電気', 30, 'sh'], ['お店の もうけ', 40, 'sh2'], ['消費税', 18, 'cut']];
+  return [
+    { fig: figTapes([{ s: 'パン1こ', segs: parts.map(([a, w, c]) => ({ w, s: a.split(' ')[0].replace('作る人の', '人'), cls: c })), total: '198円' }], { label: 'パンのねだんの内わけ' }) + figTable(['', '円 (例)'], parts.map(([a, w]) => [a, w]).concat([['ねだん', '<b>198</b>']]), { sumRow: parts.length }),
+      text: '<b>ねだんの 中身</b><br>パン 1こ のねだんには、材料だけでなく、作る人の きゅうりょう、運ぶお金、お店の電気代、お店の もうけ、そして 消費税が 入っています (数字は例)。<br>どれかが 高くなると、ねだんも 上がりやすくなります。' },
+    { fig: figSupplyDemand(),
+      text: '<b>ほしい人の数 と 売りたい数</b><br>ねだんが 安いほど ほしい人は ふえ、高いほど 売りたい人 (作りたい人) は ふえます。<br>この 2つが ちょうど つりあうところで、ねだんが 決まりやすくなります。これを「需要 (ほしい) と 供給 (売りたい)」といいます。' },
+    { fig: figSupplyDemand('demand'),
+      text: '<b>ほしい人が ふえると</b><br>暑い日の アイス、雨の日の かさ のように、ほしい人が 急に ふえると、ねだんは 上がりやすくなります。<br>反対に、野菜が たくさん とれた年 (売りたい数が ふえた) は、ねだんが 下がりやすくなります。' },
+    { fig: figTable(['同じ物でも…', 'ねうちが 高く感じる', 'ねうちが 低く感じる'], [['水 1本', 'のどが からから、山の上', '家に水道がある'], ['かさ', '急な 大雨', '晴れの日'], ['マンガ', '読みたかった 新刊', 'もう持っている']]),
+      text: '<b>ねうちは 人や場面で かわる</b><br>同じ物でも、だれが・いつ・どこで 使うかで、ねうち (どれだけ ほしいか) は かわります。<br>だから 買う前に「わたしにとって このねだんの ねうちがあるか」を 考えることが 大切です。' },
+    { fig: figTable(['くらべ方', '何に そろえる', 'れい'], [['1あたりの ねだん', '100 g・1こ・1 m', '円/100g'], ['まとめ買い', '使う数', '食べきれる？'], ['割引き・ポイント', 'はらう金額', '何% 引き？']]),
+      text: '<b>まとめ: かしこい 買い物</b><br>・ねだんの中身 (材料・人・運ぶ・もうけ・税) を 知る。<br>・ねだんは ほしい人と 売りたい数の つりあいで かわる。<br>・くらべるときは「1あたり」に そろえる (単位も計算する)。<br>・安さだけでなく、ほんとうに 使うかどうかも 考える。' },
+  ];
+}
+function currencyFrames() {
+  return [
+    { fig: figTable(['国・地いき', '通貨', 'きごう'], [['日本', '円', '¥'], ['アメリカ', 'ドル', '$'], ['ヨーロッパの 多くの国', 'ユーロ', '€'], ['イギリス', 'ポンド', '£'], ['中国', '元 (人民元)', '¥ (元)'], ['韓国', 'ウォン', '₩']]),
+      text: '<b>国ごとに ちがう お金 (通貨)</b><br>日本は 円、アメリカは ドル のように、国や地いきごとに 使うお金が ちがいます。<br>外国で 買い物をするときは、円を その国の お金に とりかえます (両替)。' },
+    { fig: rateFig('円', 'ドル', [{ pos: 1, t: '150', b: '1' }, { pos: 10, t: '1500', b: '10' }]),
+      text: '<b>為替レート = 1ドル あたり 何円</b><br>「1ドル = 150円」なら、10ドル は 1500円 です。レートは「1あたりの量」(円/ドル) なので、速さや 密度と 同じように 二本の数直線で 考えられます。<br>レートは 毎日 少しずつ かわります (ここの数字は例です)。' },
+    { fig: figTapes([{ s: '1ドル = 150円', segs: [{ w: 150, s: '150円' }] }, { s: '1ドル = 120円', segs: [{ w: 120, s: '120円', cls: 'sh3' }], total: '円高' }, { s: '1ドル = 180円', segs: [{ w: 180, s: '180円', cls: 'sh2' }], total: '円安' }], { label: '1ドルに必要な円のテープ図' }),
+      text: '<b>円高 と 円安</b><br>1ドル を手に入れるのに 必要な円が 少なくなる (150円 → 120円) のが <b>円高</b>: 円の ねうちが 上がった。<br>多く必要になる (150円 → 180円) のが <b>円安</b>: 円の ねうちが 下がった。<br>数字が 小さくなるのに「高」なので、「円の 力が 強くなった」と 考えると わかりやすいです。' },
+    { fig: figTable(['', '円高', '円安'], [['外国旅行', 'とく', 'そん'], ['輸入 (外国から買う)', '安くなりやすい', '高くなりやすい'], ['輸出 (外国へ売る)', 'もうけが へりやすい', 'もうけが ふえやすい']]),
+      text: '<b>だれが とく？ そん？</b><br>円高・円安は、どちらが よい とは決まっていません。旅行する人、外国から物を買う会社、外国へ物を売る会社で、とく・そんが 反対になります。' },
+    { fig: ueq([['円 → ドル', `${uqHTML(uq(3000, '円'))}${uop('÷')}${uqHTML(uq(150, '円', 1, 'ドル'))}${uop('=')}${uqHTML(uq(20, 'ドル'))}`, 'all'], ['ドル → 円', `${mulChain([uq(20, 'ドル'), uq(150, '円', 1, 'ドル')])}${uop('=')}${uqHTML(uq(3000, '円'))}`, 'all']], '単位の式で 両替'),
+      text: '<b>まとめ: 両替も 単位の計算</b><br>ドル → 円 は レート (円/ドル) を かける、円 → ドル は レートで わる。どちらにするか まよったら、単位が 消えて ほしい通貨が のこるかを たしかめましょう。' },
+  ];
+}
+function savingsFrames() {
+  return [
+    { fig: figFlow([{ s: 'あずける人', sub: 'お金を\nあずける' }, { s: '銀行', sub: 'お金を\nかす', cls: 'sh3' }, { s: 'かりる人・会社', sub: '利息をつけて\nかえす' }], { arrows: ['あずける', 'かす'], back: '利息の一部が あずけた人へ', label: '銀行のしくみ' }),
+      text: '<b>銀行の しくみ</b><br>銀行は、みんなから あずかったお金を、家を買う人や 会社に かします。かりた人は「かりたお礼」として 利息をつけて かえします。その一部が、あずけた人への 利息になります。' },
+    { fig: figTapes([0, 1, 2, 3].map((y) => ({ s: `${y}年後`, segs: [{ w: 100, s: '10000' }, ...(y ? [{ w: 10 * y, s: `+${500 * y}`, cls: 'sh2' }] : [])] })), { label: '毎年同じだけ利息がつくテープ図' }),
+      text: '<b>利息の計算 (単利)</b><br>10000円 を 1年に 5% で あずけると、1年の利息は 10000 × 0.05 = 500円。毎年 はじめの 10000円 にだけ 利息がつくなら、3年で 500 × 3 = 1500円。<br><small>本当の預金の利率は もっと低いことが多く、税金も ひかれます。数字は 計算しやすい例です。</small>' },
+    { fig: figTapes([{ s: 'はじめ', segs: [{ w: 100, s: '10000' }] }, { s: '1年後', segs: [{ w: 100, s: '10000' }, { w: 10, s: '+1000', cls: 'sh2' }] }, { s: '2年後', segs: [{ w: 110, s: '11000' }, { w: 11, s: '+1100', cls: 'sh2' }] }, { s: '3年後', segs: [{ w: 121, s: '12100' }, { w: 12.1, s: '+1210', cls: 'sh2' }] }], { label: '利息に利息がつくテープ図' }),
+      text: '<b>利息にも 利息がつく (複利)</b><br>1年に 10% ふえると、1年後 11000円。次の年は 11000円 全体が もとになるので 利息は 1100円、その次は 1210円…。<br>ふえ方が だんだん 大きくなります。長い間 ためるほど ちがいが 大きくなります。' },
+    { fig: figTable(['', 'ためる (あずける)', 'かりる (ローン・あとばらい)'], [['利息', 'もらう', 'はらう'], ['長くなると', 'ふえる', 'はらう分が ふえる'], ['気をつけること', 'すぐ使えない お金もある', '返す計画を 先に立てる']]),
+      text: '<b>かりるときは 反対</b><br>お金を かりると、利息を はらいます。返すのが おそいほど、はらう利息は ふえます。<br>カードの「あとばらい」や 分割ばらいも、手数料 (利息のようなもの) が つくことがあります。' },
+    { fig: figFlow([{ s: 'もらう', sub: 'おこづかい\nお年玉' }, { s: 'わける', sub: 'つかう・ためる\n(だれかのために)', cls: 'sh3' }, { s: 'ふりかえる', sub: 'おこづかい帳\nで計算', cls: 'sh2' }], { label: 'お金の使い方のサイクル' }),
+      text: '<b>まとめ: 自分のお金を どう使う？</b><br>もらったお金を「今つかう」「ためて あとで使う」に 分けて、おこづかい帳で 計算してみましょう。<br>パーセントや 利息の計算は、大人になって 貯金や ローンを えらぶときに そのまま 役立ちます。' },
+  ];
+}
+
 function figTapes(rows, o = {}) {
   const W = 540, x0 = 104, TW = 400;
   const max = o.max || Math.max(...rows.map((r) => r.segs.reduce((a, s) => a + s.w, 0)));
@@ -1700,6 +1923,10 @@ function orderWhyFrames() {
 const LESSONS = {
   order: { title: '計算の順番のわけ', frames: orderWhyFrames, stage: 'A4', btn: 'なぜこの順番？ くわしく見る' },
   unit: { title: '単位も計算する', frames: unitWhyFrames, stage: 'B5', btn: '単位の計算を くわしく見る' },
+  money: { title: 'お金ってなに？', frames: moneyWhatFrames, stage: 'C1', btn: 'お金のしくみを見る' },
+  price: { title: 'ねだんは どう決まる？', frames: priceFrames, stage: 'C2', btn: 'ねだんの決まり方を くわしく見る' },
+  currency: { title: '通貨と為替 (円高・円安)', frames: currencyFrames, stage: 'C3', btn: '通貨と為替を くわしく見る' },
+  savings: { title: 'ためる・かりる (利息)', frames: savingsFrames, stage: 'C3', btn: '利息のしくみを くわしく見る' },
 };
 
 function makeProblem(type, level) {
