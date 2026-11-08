@@ -230,6 +230,10 @@ table.mx td, table.mx th { text-align: center; }
 .tr .tv, .tr .tt { font-variant-numeric: tabular-nums; }
 @media (max-width: 600px) { .mine .li { grid-template-columns: 2.4em minmax(0, 1fr); } .mine .li .aa, .mine .li .tt { grid-column: 2; text-align: left; } }
 .figsvg .dot { fill: var(--mark); }
+.figsvg text.ict { font-family: var(--f-body); font-weight: 700; }
+.figsvg .lbl { fill: var(--sheet); opacity: .92; }
+.figsvg .inkst { stroke: var(--ink); fill: none; }
+.figsvg .inkfill { fill: var(--ink); }
 .figsvg .sh3ln { stroke: var(--sea-ink); stroke-width: 2.5; }
 .figsvg .dash2 { stroke-dasharray: 7 5; }
 .fbq { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: .9rem; color: var(--ink-2); margin-top: 4px; }
@@ -2041,6 +2045,152 @@ function unitWhyFrames() {
   ];
 }
 
+// ===== お金の絵の図 (アイコン・コイン・円グラフ・てんびん) =====
+// アイコンは 100×100 の座標で描き、icon() で 置く場所と大きさを決める。色は 明るい画面・暗い画面の どちらでも 見えるように固定色
+const PAL = { gold: '#F6C343', goldD: '#B8860B', green: '#6CC487', greenD: '#2F7D4A', blue: '#5AA9E6', blueD: '#2A6FA8', coral: '#F27C7C', purple: '#A88BE8', orange: '#F4A259', gray: '#CFD8DF', grayD: '#7C8A96', ink: '#2B3A55', pink: '#F7A8C0', white: '#FFFFFF', red: '#E5534B', brown: '#C98B4E', teal: '#4DB6AC', sky: '#BFE3FF', cream: '#FFF1C9' };
+const PEOPLE = [PAL.blue, PAL.coral, PAL.purple, PAL.teal, PAL.orange];
+const isk = `stroke="${PAL.ink}" stroke-width="3" stroke-linejoin="round"`;
+const itx = (x, y, s, size = 16, fill = PAL.ink) => `<text x="${x}" y="${y}" text-anchor="middle" class="ict" style="font-size:${size}px;fill:${fill}">${esc(s)}</text>`;
+const IC = {
+  person: (o = {}) => `<circle cx="50" cy="30" r="17" fill="${o.c || PAL.blue}" ${isk}/><path d="M20 97 Q20 55 50 55 Q80 55 80 97 Z" fill="${o.c || PAL.blue}" ${isk}/>`,
+  house: () => `<path d="M12 50 L50 14 L88 50 Z" fill="${PAL.coral}" ${isk}/><rect x="22" y="48" width="56" height="44" fill="${PAL.cream}" ${isk}/><rect x="43" y="64" width="15" height="28" fill="${PAL.brown}" ${isk}/>`,
+  shop: () => `<rect x="16" y="40" width="68" height="52" fill="${PAL.cream}" ${isk}/><path d="M10 22 H90 L86 42 H14 Z" fill="${PAL.red}" ${isk}/><path d="M30 22 L28 42 M50 22 V42 M70 22 L72 42" stroke="${PAL.white}" stroke-width="5"/><rect x="26" y="54" width="22" height="18" fill="${PAL.sky}" ${isk}/><rect x="56" y="56" width="16" height="36" fill="${PAL.brown}" ${isk}/>`,
+  company: () => `<rect x="20" y="16" width="60" height="78" fill="${PAL.gray}" ${isk}/>${[30, 46, 62].map((y) => [30, 46, 62].map((x) => `<rect x="${x}" y="${y}" width="9" height="9" fill="${PAL.sky}" stroke="${PAL.ink}" stroke-width="1.5"/>`).join('')).join('')}<rect x="43" y="78" width="14" height="16" fill="${PAL.brown}" ${isk}/>`,
+  bank: () => `<path d="M10 38 L50 12 L90 38 Z" fill="${PAL.gold}" ${isk}/><rect x="14" y="38" width="72" height="8" fill="${PAL.gray}" ${isk}/>${[22, 40, 58, 72].map((x) => `<rect x="${x}" y="48" width="8" height="34" fill="${PAL.white}" ${isk}/>`).join('')}<rect x="10" y="82" width="80" height="10" fill="${PAL.gray}" ${isk}/>${itx(50, 34, '¥', 16)}`,
+  city: () => `<rect x="14" y="40" width="72" height="52" fill="${PAL.gray}" ${isk}/><path d="M34 40 Q50 14 66 40 Z" fill="${PAL.teal}" ${isk}/><path d="M50 18 V4 L64 9 L50 13" fill="${PAL.red}" ${isk}/>${[22, 40, 58, 72].map((x) => `<rect x="${x}" y="52" width="8" height="12" fill="${PAL.sky}" stroke="${PAL.ink}" stroke-width="1.5"/>`).join('')}<rect x="42" y="72" width="16" height="20" fill="${PAL.brown}" ${isk}/>`,
+  school: () => `<rect x="10" y="44" width="80" height="48" fill="${PAL.cream}" ${isk}/><path d="M34 44 V26 H66 V44" fill="${PAL.cream}" ${isk}/><circle cx="50" cy="35" r="7" fill="${PAL.white}" ${isk}/>${[18, 32, 60, 74].map((x) => `<rect x="${x}" y="56" width="9" height="10" fill="${PAL.sky}" stroke="${PAL.ink}" stroke-width="1.5"/>`).join('')}<rect x="43" y="70" width="14" height="22" fill="${PAL.brown}" ${isk}/>`,
+  coin: (o = {}) => `<circle cx="50" cy="50" r="40" fill="${o.c || PAL.gold}" ${isk}/><circle cx="50" cy="50" r="30" fill="none" stroke="${o.d || PAL.goldD}" stroke-width="2.5"/>${itx(50, 50 + (o.size || 26) * 0.36, o.s || '¥', o.size || 26)}`,
+  bill: (o = {}) => `<rect x="4" y="24" width="92" height="52" rx="5" fill="${o.c || PAL.green}" ${isk}/><circle cx="72" cy="50" r="15" fill="none" stroke="${PAL.greenD}" stroke-width="2.5"/>${itx(36, 58, o.s || '円', o.size || 20)}`,
+  piggy: () => `<ellipse cx="50" cy="58" rx="38" ry="28" fill="${PAL.pink}" ${isk}/><path d="M30 36 L34 22 L44 33" fill="${PAL.pink}" ${isk}/><ellipse cx="86" cy="58" rx="7" ry="9" fill="${PAL.pink}" ${isk}/><circle cx="68" cy="50" r="3.5" fill="${PAL.ink}"/><rect x="40" y="30" width="20" height="5" rx="2" fill="${PAL.ink}"/><path d="M30 82 V94 M66 82 V94" stroke="${PAL.ink}" stroke-width="6" stroke-linecap="round"/>`,
+  card: () => `<rect x="6" y="22" width="88" height="58" rx="8" fill="${PAL.blue}" ${isk}/><rect x="6" y="34" width="88" height="10" fill="${PAL.ink}"/><rect x="16" y="54" width="18" height="12" rx="2" fill="${PAL.gold}"/>`,
+  phone: () => `<rect x="28" y="6" width="44" height="88" rx="8" fill="${PAL.ink}"/><rect x="33" y="16" width="34" height="62" rx="3" fill="${PAL.sky}"/>${itx(50, 54, '¥', 22)}`,
+  fish: () => `<path d="M14 50 Q40 22 70 50 Q40 78 14 50 Z" fill="${PAL.blue}" ${isk}/><path d="M68 50 L90 34 V66 Z" fill="${PAL.blue}" ${isk}/><circle cx="30" cy="46" r="4" fill="${PAL.ink}"/>`,
+  bread: () => `<path d="M14 70 Q8 30 50 28 Q92 30 86 70 Z" fill="${PAL.orange}" ${isk}/><path d="M34 40 L40 60 M50 36 V60 M66 40 L60 60" stroke="${PAL.brown}" stroke-width="3"/><rect x="14" y="68" width="72" height="10" rx="4" fill="${PAL.brown}" ${isk}/>`,
+  shoe: () => `<path d="M10 70 V40 H40 Q46 56 70 58 Q90 60 90 72 V78 H10 Z" fill="${PAL.purple}" ${isk}/><path d="M10 78 H90" stroke="${PAL.ink}" stroke-width="6"/>`,
+  water: () => `<rect x="34" y="8" width="32" height="12" rx="3" fill="${PAL.blue}" ${isk}/><path d="M30 26 Q30 20 36 20 H64 Q70 20 70 26 V90 Q70 94 66 94 H34 Q30 94 30 90 Z" fill="${PAL.sky}" ${isk}/><rect x="30" y="46" width="40" height="22" fill="${PAL.white}" ${isk}/>`,
+  umbrella: () => `<path d="M10 52 Q50 0 90 52 Z" fill="${PAL.purple}" ${isk}/><path d="M50 52 V84 Q50 92 42 92 Q36 92 36 86" fill="none" ${isk}/>`,
+  book: () => `<path d="M50 24 Q30 14 10 20 V84 Q30 78 50 88 Q70 78 90 84 V20 Q70 14 50 24 Z" fill="${PAL.white}" ${isk}/><path d="M50 24 V88" ${isk}/><path d="M18 34 H40 M18 46 H40 M60 34 H82 M60 46 H82" stroke="${PAL.grayD}" stroke-width="3"/>`,
+  road: () => `<path d="M6 92 L34 20 H66 L94 92 Z" fill="${PAL.grayD}" ${isk}/><path d="M50 26 V38 M50 50 V62 M50 74 V88" stroke="${PAL.white}" stroke-width="5"/>`,
+  signal: () => `<rect x="46" y="44" width="8" height="50" fill="${PAL.grayD}" ${isk}/><rect x="12" y="10" width="76" height="34" rx="8" fill="${PAL.ink}"/><circle cx="30" cy="27" r="9" fill="${PAL.green}"/><circle cx="50" cy="27" r="9" fill="${PAL.gold}"/><circle cx="70" cy="27" r="9" fill="${PAL.red}"/>`,
+  firetruck: () => `<rect x="6" y="36" width="58" height="38" fill="${PAL.red}" ${isk}/><path d="M64 46 H82 L94 60 V74 H64 Z" fill="${PAL.red}" ${isk}/><rect x="70" y="50" width="12" height="10" fill="${PAL.sky}" stroke="${PAL.ink}" stroke-width="2"/><path d="M10 30 L58 22 M10 36 L58 28" stroke="${PAL.grayD}" stroke-width="4"/><circle cx="24" cy="78" r="9" fill="${PAL.ink}"/><circle cx="76" cy="78" r="9" fill="${PAL.ink}"/>`,
+  police: () => `<path d="M14 54 L26 36 H70 L84 54 Z" fill="${PAL.white}" ${isk}/><rect x="6" y="52" width="88" height="24" rx="6" fill="${PAL.ink}"/><rect x="42" y="28" width="16" height="8" fill="${PAL.red}" ${isk}/><circle cx="24" cy="78" r="9" fill="${PAL.ink}" stroke="${PAL.white}" stroke-width="3"/><circle cx="76" cy="78" r="9" fill="${PAL.ink}" stroke="${PAL.white}" stroke-width="3"/>`,
+  garbage: () => `<rect x="6" y="32" width="56" height="42" rx="4" fill="${PAL.green}" ${isk}/><path d="M62 44 H80 L94 58 V74 H62 Z" fill="${PAL.white}" ${isk}/><path d="M22 44 V64 M34 44 V64 M46 44 V64" stroke="${PAL.greenD}" stroke-width="3"/><circle cx="24" cy="78" r="9" fill="${PAL.ink}"/><circle cx="76" cy="78" r="9" fill="${PAL.ink}"/>`,
+  tree: () => `<rect x="44" y="60" width="12" height="32" fill="${PAL.brown}" ${isk}/><circle cx="50" cy="40" r="30" fill="${PAL.green}" ${isk}/>`,
+  hospital: () => `<rect x="16" y="24" width="68" height="68" fill="${PAL.white}" ${isk}/><path d="M50 34 V62 M36 48 H64" stroke="${PAL.red}" stroke-width="10"/><rect x="42" y="72" width="16" height="20" fill="${PAL.sky}" ${isk}/>`,
+  bag: () => `<path d="M20 34 H80 L86 92 H14 Z" fill="${PAL.orange}" ${isk}/><path d="M36 34 Q36 12 50 12 Q64 12 64 34" fill="none" ${isk}/>${itx(50, 72, '%', 22)}`,
+  envelope: () => `<rect x="8" y="24" width="84" height="56" rx="4" fill="${PAL.cream}" ${isk}/><path d="M8 26 L50 56 L92 26" fill="none" ${isk}/>${itx(50, 76, 'きゅうりょう', 11)}`,
+  car: () => `<path d="M10 70 V54 L24 34 H72 L88 54 V70 Z" fill="${PAL.blue}" ${isk}/><rect x="30" y="40" width="18" height="12" fill="${PAL.sky}"/><rect x="52" y="40" width="18" height="12" fill="${PAL.sky}"/><circle cx="28" cy="72" r="10" fill="${PAL.ink}"/><circle cx="72" cy="72" r="10" fill="${PAL.ink}"/>`,
+  land: () => `<path d="M4 80 Q50 66 96 80 V94 H4 Z" fill="${PAL.green}" ${isk}/><path d="M28 56 L50 36 L72 56 Z" fill="${PAL.coral}" ${isk}/><rect x="34" y="55" width="32" height="20" fill="${PAL.cream}" ${isk}/>`,
+  plane: () => `<path d="M8 54 L92 40 Q98 46 90 52 L60 58 L44 84 H34 L40 60 L20 64 L14 74 H8 L10 58 Z" fill="${PAL.white}" ${isk}/>`,
+  shipIn: () => `<path d="M8 60 H92 L80 84 H20 Z" fill="${PAL.blue}" ${isk}/><rect x="30" y="38" width="20" height="22" fill="${PAL.orange}" ${isk}/><rect x="52" y="44" width="20" height="16" fill="${PAL.green}" ${isk}/>`,
+  jar: (o = {}) => `<rect x="30" y="10" width="40" height="10" rx="3" fill="${PAL.grayD}" ${isk}/><path d="M24 26 Q24 20 30 20 H70 Q76 20 76 26 V86 Q76 94 68 94 H32 Q24 94 24 86 Z" fill="${PAL.sky}" ${isk} fill-opacity=".6"/>${Array.from({ length: o.n || 3 }, (_, i) => `<ellipse cx="50" cy="${86 - i * 9}" rx="18" ry="5" fill="${PAL.gold}" stroke="${PAL.goldD}" stroke-width="2"/>`).join('')}`,
+  note: () => `<rect x="18" y="8" width="64" height="86" rx="4" fill="${PAL.white}" ${isk}/><path d="M28 28 H72 M28 44 H72 M28 60 H72 M28 76 H56" stroke="${PAL.grayD}" stroke-width="3"/><rect x="18" y="8" width="10" height="86" fill="${PAL.coral}" ${isk}/>`,
+  gift: () => `<rect x="14" y="40" width="72" height="52" fill="${PAL.coral}" ${isk}/><rect x="10" y="30" width="80" height="14" fill="${PAL.coral}" ${isk}/><path d="M50 30 V92" stroke="${PAL.gold}" stroke-width="10"/><path d="M50 30 Q34 8 28 24 Q30 32 50 30 Q66 8 72 24 Q70 32 50 30" fill="${PAL.gold}" ${isk}/>`,
+  pot: () => `<path d="M10 34 H90 L82 90 Q80 96 72 96 H28 Q20 96 18 90 Z" fill="${PAL.gold}" ${isk}/><rect x="6" y="26" width="88" height="12" rx="5" fill="${PAL.goldD}" ${isk}/>${itx(50, 74, 'みんなのお金', 12)}`,
+  swap: () => `<circle cx="50" cy="50" r="42" fill="${PAL.cream}" ${isk}/><path d="M26 40 H70 L60 30 M74 60 H30 L40 70" fill="none" stroke="${PAL.ink}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>`,
+  ruler: () => `<rect x="6" y="34" width="88" height="32" rx="4" fill="${PAL.gold}" ${isk}/>${[16, 28, 40, 52, 64, 76, 88].map((x, i) => `<path d="M${x} 34 V${i % 2 ? 44 : 50}" stroke="${PAL.ink}" stroke-width="2.5"/>`).join('')}${itx(50, 62, '¥', 14)}`,
+  thinking: () => `<circle cx="50" cy="44" r="36" fill="${PAL.white}" ${isk}/><circle cx="26" cy="86" r="6" fill="${PAL.white}" ${isk}/><circle cx="16" cy="96" r="3" fill="${PAL.white}" ${isk}/>`,
+};
+function icon(name, x, y, s = 48, o) { return `<g transform="translate(${r1(x)} ${r1(y)}) scale(${r1(s / 100 * 1000) / 1000})">${IC[name](o)}</g>`; }
+// カード: アイコン + 見出し + 説明 (\n で改行)
+function figCards(items, o = {}) {
+  const W = o.W || 540, cols = o.cols || 3, gap = 10, cw = (W - gap * (cols - 1)) / cols, isz = o.isz || 52;
+  const lines = Math.max(...items.map((it) => (it.sub ? String(it.sub).split('\n').length : 0)));
+  const ch = isz + 34 + lines * 16 + 10; let b = '';
+  items.forEach((it, i) => {
+    const x = (i % cols) * (cw + gap), y = Math.floor(i / cols) * (ch + gap);
+    b += `<rect class="${it.cls || 'bx'}" x="${r1(x)}" y="${y}" width="${r1(cw)}" height="${ch}" rx="12"/>`;
+    b += icon(it.ic, x + cw / 2 - isz / 2, y + 8, isz, it.o) + svgText(x + cw / 2, y + isz + 26, it.s, 'b');
+    if (it.sub) String(it.sub).split('\n').forEach((ln, k) => { b += svgText(x + cw / 2, y + isz + 44 + k * 16, ln, it.subcls || 's'); });
+  });
+  const rows = Math.ceil(items.length / cols);
+  return svgBox(W, rows * ch + (rows - 1) * gap + 2, b, o.label || 'カードの図');
+}
+// 矢印 (少しまげられる)。ラベルは まん中に
+function arrowTo(x1, y1, x2, y2, s = '', bend = 0, cls = 'ac') {
+  const mx = (x1 + x2) / 2, my = (y1 + y2) / 2, dx = x2 - x1, dy = y2 - y1, L = Math.hypot(dx, dy) || 1;
+  const cx = mx - dy / L * bend, cy = my + dx / L * bend;
+  const ex = x2 - cx, ey = y2 - cy, eL = Math.hypot(ex, ey) || 1, ux = ex / eL, uy = ey / eL;
+  const h1x = x2 - ux * 9 - uy * 6, h1y = y2 - uy * 9 + ux * 6, h2x = x2 - ux * 9 + uy * 6, h2y = y2 - uy * 9 - ux * 6;
+  let b = `<path class="${cls}" d="M${r1(x1)} ${r1(y1)} Q${r1(cx)} ${r1(cy)} ${r1(x2)} ${r1(y2)} M${r1(h1x)} ${r1(h1y)} L${r1(x2)} ${r1(y2)} L${r1(h2x)} ${r1(h2y)}"/>`;
+  if (s) { const lx = (mx + cx) / 2, ly = (my + cy) / 2; b += `<rect x="${r1(lx - s.length * 6.5 - 4)}" y="${r1(ly - 11)}" width="${r1(s.length * 13 + 8)}" height="20" rx="6" class="lbl"/>` + svgText(lx, ly + 4, s, 'm'); }
+  return b;
+}
+// アイコンを並べて矢印でつなぐ流れの図
+function figIconFlow(nodes, o = {}) {
+  const W = o.W || 540, n = nodes.length, isz = o.isz || 64, top = 6; const step = (W - 20) / n; let b = '';
+  const cx = (i) => 10 + step * i + step / 2;
+  nodes.forEach((nd, i) => {
+    b += icon(nd.ic, cx(i) - isz / 2, top, isz, nd.o) + svgText(cx(i), top + isz + 20, nd.s, 'b');
+    if (nd.sub) String(nd.sub).split('\n').forEach((ln, k) => { b += svgText(cx(i), top + isz + 37 + k * 15, ln, 's'); });
+    if (i < n - 1) b += arrowTo(cx(i) + isz / 2 + 6, top + isz / 2, cx(i + 1) - isz / 2 - 6, top + isz / 2, (o.arrows || [])[i] || '');
+  });
+  const subl = Math.max(0, ...nodes.map((nd) => (nd.sub ? String(nd.sub).split('\n').length : 0)));
+  let H = top + isz + 26 + subl * 15;
+  if (o.back) { const yb = H + 8; b += `<path class="ac" d="M${r1(cx(n - 1))} ${yb} V${yb + 16} H${r1(cx(0))} V${yb} m-6 8 l6 -8 l6 8"/>` + svgText(W / 2, yb + 34, o.back, 'm'); H = yb + 42; }
+  return svgBox(W, H, b, o.label || '流れの図');
+}
+// 円で めぐる図: nodes = [{ic, s, x, y}], edges = [{a, b, s, bend}]
+function figCycle(nodes, edges, o = {}) {
+  const W = o.W || 540, H = o.H || 300, isz = o.isz || 64; let b = '';
+  edges.forEach((e) => { const A = nodes[e.a], B = nodes[e.b]; const dx = B.x - A.x, dy = B.y - A.y, L = Math.hypot(dx, dy); const k = (isz / 2 + 14) / L; b += arrowTo(A.x + dx * k, A.y + dy * k, B.x - dx * k, B.y - dy * k, e.s, e.bend || 0); });
+  nodes.forEach((nd) => { b += icon(nd.ic, nd.x - isz / 2, nd.y - isz / 2, isz, nd.o) + svgText(nd.x, nd.y + isz / 2 + 18, nd.s, 'b'); });
+  return svgBox(W, H, b, o.label || 'めぐる図');
+}
+// 円のお金を お札とコインで (多いときは まとめて ×n)
+const YEN_DEN = [10000, 5000, 1000, 500, 100, 50, 10, 5, 1];
+function yenPieces(v) { const out = []; let r = v; for (const d of YEN_DEN) { const k = Math.floor(r / d); if (k) out.push([d, k]); r -= k * d; } return out; }
+function moneyRow(v, x, y, o = {}) { // 戻り値: [svg, 幅]
+  let b = '', cx = x; const sz = o.sz || 40;
+  yenPieces(v).forEach(([d, k]) => {
+    const bill = d >= 1000; const w = bill ? sz * 1.5 : sz;
+    const show = Math.min(k, o.max || 4);
+    for (let i = 0; i < show; i++) { b += icon(bill ? 'bill' : 'coin', cx, y - (bill ? 0 : 0), w, bill ? { s: String(d), size: 22, c: d === 10000 ? '#B9A6E0' : d === 5000 ? '#E8B8D0' : PAL.green } : { s: String(d), size: d >= 100 ? 24 : 28, c: d === 500 || d === 50 || d === 5 ? '#E8C766' : d === 100 ? '#D9DEE3' : d === 10 ? '#D79A5E' : PAL.gold, d: PAL.grayD }); cx += w * (bill ? 0.9 : 0.78); }
+    if (k > show) { b += svgText(cx + 6, y + sz / 2 + 5, `×${k}`, 'b', 'start'); cx += 34; }
+    cx += 8;
+  });
+  return [b, cx - x];
+}
+// 円グラフ: parts = [{v, s, c}]
+function figPie(parts, o = {}) {
+  const W = o.W || 540, R = o.R || 90, cx = o.cx || 120, cy = R + 14; const tot = parts.reduce((s, p) => s + p.v, 0); let a = -Math.PI / 2, b = '';
+  parts.forEach((p) => {
+    const a2 = a + p.v / tot * Math.PI * 2; const large = a2 - a > Math.PI ? 1 : 0;
+    b += `<path d="M${cx} ${cy} L${r1(cx + R * Math.cos(a))} ${r1(cy + R * Math.sin(a))} A${R} ${R} 0 ${large} 1 ${r1(cx + R * Math.cos(a2))} ${r1(cy + R * Math.sin(a2))} Z" fill="${p.c}" stroke="${PAL.ink}" stroke-width="1.5"/>`;
+    const am = (a + a2) / 2; if (p.v / tot > 0.08 && p.in) b += `<text x="${r1(cx + R * 0.62 * Math.cos(am))}" y="${r1(cy + R * 0.62 * Math.sin(am) + 5)}" text-anchor="middle" class="ict" style="font-size:13px;fill:${PAL.ink}">${esc(p.in)}</text>`;
+    a = a2;
+  });
+  parts.forEach((p, i) => { const y = 24 + i * 42; b += `<rect x="${cx + R + 30}" y="${y - 13}" width="18" height="18" rx="4" fill="${p.c}" stroke="${PAL.ink}" stroke-width="1.2"/>` + svgText(cx + R + 56, y + 1, p.s, 'b', 'start') + (p.sub ? svgText(cx + R + 56, y + 16, p.sub, 's', 'start') : ''); });
+  return svgBox(W, Math.max(cy + R + 12, 24 + parts.length * 42 + 10), b, o.label || '円グラフ');
+}
+// てんびん: 左 = ほしい人、右 = 品物。tilt: 'L' なら 左 (ほしい人) が重い → ねだんが上がる
+function figScale(nl, nr, o = {}) {
+  const W = 540, cx = 270, by = 220; const t = nl > nr ? 1 : nl < nr ? -1 : 0; const ang = t * 10 * Math.PI / 180;
+  const L = 165, yb0 = 90, xl = cx - L * Math.cos(ang), yl = yb0 + L * Math.sin(ang), xr = cx + L * Math.cos(ang), yr = yb0 - L * Math.sin(ang);
+  let b = `<path d="M${cx} ${yb0} L${cx - 30} ${by} H${cx + 30} Z" fill="${PAL.gray}" stroke="${PAL.ink}" stroke-width="2"/><line x1="${r1(xl)}" y1="${r1(yl)}" x2="${r1(xr)}" y2="${r1(yr)}" class="inkst" stroke-width="5" stroke-linecap="round"/><circle cx="${cx}" cy="${yb0}" r="7" class="inkfill"/>`;
+  const pan = (x, y, items) => `<path d="M${r1(x - 60)} ${r1(y + 54)} H${r1(x + 60)}" class="inkst" stroke-width="4" stroke-linecap="round"/><path d="M${r1(x)} ${r1(y)} L${r1(x - 54)} ${r1(y + 54)} M${r1(x)} ${r1(y)} L${r1(x + 54)} ${r1(y + 54)}" stroke="${PAL.grayD}" stroke-width="1.5"/>` + items;
+  const people = (x, y, n) => Array.from({ length: n }, (_, i) => icon('person', x - 54 + (i % 4) * 26, y + 26 - Math.floor(i / 4) * 24, 28, { c: PEOPLE[i % PEOPLE.length] })).join('');
+  const goods = (x, y, n) => Array.from({ length: n }, (_, i) => icon(o.goods || 'bread', x - 54 + (i % 4) * 26, y + 28 - Math.floor(i / 4) * 22, 28)).join('');
+  b += pan(xl, yl, people(xl, yl, nl)) + pan(xr, yr, goods(xr, yr, nr));
+  b += svgText(xl, by + 22, 'ほしい人', 'b') + svgText(xr, by + 22, '売りたい品物', 'b');
+  const tag = o.tag || (t > 0 ? 'ねだん ↑ 上がる' : t < 0 ? 'ねだん ↓ 下がる' : 'ちょうどよい ねだん');
+  b += `<rect x="${cx - 90}" y="2" width="180" height="36" rx="10" class="${t > 0 ? 'sh2' : t < 0 ? 'sh3' : 'sh'}"/>` + svgText(cx, 26, tag, 'b');
+  return svgBox(W, by + 30, b, o.label || 'てんびんの図');
+}
+// 年ごとの お金の柱。rows = [{s, base, add: [{v, c, s}]}]
+function figColumns(cols, o = {}) {
+  const W = o.W || 540, H = o.H || 250, x0 = 40, bw = o.bw || 56; const max = o.max || Math.max(...cols.map((c) => c.base + (c.add || []).reduce((s, a) => s + a.v, 0)));
+  const k = (H - 84) / max, gap = (W - x0 - 10 - cols.length * bw) / Math.max(1, cols.length - 1); let b = `<line class="ln" x1="${x0 - 10}" y1="${H - 30}" x2="${W - 4}" y2="${H - 30}"/>`;
+  cols.forEach((c, i) => {
+    const x = x0 + i * (bw + gap); let y = H - 30 - c.base * k;
+    b += `<rect x="${r1(x)}" y="${r1(y)}" width="${bw}" height="${r1(c.base * k)}" fill="${PAL.gold}" stroke="${PAL.ink}" stroke-width="1.2"/>`;
+    (c.add || []).forEach((a) => { const h = a.v * k; y -= h; b += `<rect x="${r1(x)}" y="${r1(y)}" width="${bw}" height="${r1(Math.max(h, 2))}" fill="${a.c}" stroke="${PAL.ink}" stroke-width="1.2"/>`; });
+    if (c.top) b += svgText(x + bw / 2, y - 8, c.top, 'b');
+    b += svgText(x + bw / 2, H - 10, c.s, 's');
+  });
+  (o.legend || []).forEach((l, i) => { b += `<rect x="${x0 + i * 122}" y="4" width="14" height="14" rx="3" fill="${l.c}" stroke="${PAL.ink}" stroke-width="1"/>` + svgText(x0 + 20 + i * 122, 16, l.s, 's', 'start'); });
+  return svgBox(W, H, b, o.label || '柱の図');
+}
 // ===== お金とくらし =====
 // 制度や相場の数字は「例」。消費税は 2026年時点の制度 (標準 10%、食料品など 8%) を前提にしている。変わったら MONEY_FACTS を直す
 const MONEY_FACTS = { taxStd: 10, taxFood: 8, rates: { ドル: [140, 145, 150, 155, 160], ユーロ: [160, 165, 170] } };
@@ -2190,7 +2340,7 @@ GEN.m_interest = () => {
   if (rnd() < 0.6) { const n = ri(1, 3); const I = P * r / 100 * n;
     return { html: `${P.toLocaleString('ja-JP')}円 を、1年に ${r}% の利息がつく 銀行に あずけます。${n}年 で つく利息は <b class="box">□</b> 円 (毎年 はじめの ${P.toLocaleString('ja-JP')}円 にだけ 利息がつくとします)`, text: `${P}円 年${r}% ${n}年 (単利) → 利息□円`, slots: [slot(I, '円')],
       explain: () => [
-        { fig: figFlow([{ s: 'あずける人', sub: `${P.toLocaleString('ja-JP')}円\nあずける` }, { s: '銀行', sub: 'お金を\nかしだす', cls: 'sh3' }, { s: 'かりる人・会社', sub: '利息をつけて\nかえす' }], { arrows: ['あずける', 'かす'], back: '利息の一部が、あずけた人にも わたる', label: '銀行のお金の流れ' }),
+        { fig: figIconFlow([{ ic: 'person', s: 'あずける人', sub: `${P.toLocaleString('ja-JP')}円`, o: { c: PEOPLE[0] } }, { ic: 'bank', s: '銀行' }, { ic: 'company', s: 'かりる人・会社' }], { arrows: ['あずける', 'かす'], back: '利息をつけて かえす → その一部が あずけた人へ', label: '銀行のお金の流れ' }),
           text: '銀行は、あずかったお金を 家や会社に かして、利息をつけて かえしてもらいます。その利息の一部が、あずけた人への 利息になります。', lesson: 'savings' },
         { fig: figTapes(Array.from({ length: n }, (_, i) => ({ s: `${i + 1}年目`, segs: [{ w: 100, s: `${P.toLocaleString('ja-JP')}円` }, { w: r * 6, s: `+${(P * r / 100).toLocaleString('ja-JP')}`, cls: 'sh2' }] })), { label: '毎年の利息のテープ図' }),
           text: `1年の利息は ${P.toLocaleString('ja-JP')} × ${r / 100} = ${(P * r / 100).toLocaleString('ja-JP')}円。${n}年 なら × ${n} で <b>${I.toLocaleString('ja-JP')}円</b>。<br><small>本当の 預金の利息は、税金が ひかれたり、利率が もっと低かったりします。数字は例です。</small>` },
@@ -2211,17 +2361,18 @@ GEN.t_share = () => {
   const uses = [['教育 (学校など)', pick([10, 15, 20, 25])], ['福祉・医療', pick([25, 30, 35])], ['道路・公園', pick([10, 15])]];
   const k = ri(0, uses.length - 1); const [what, r] = uses[k]; const part = B * r / 100;
   const rest = 100 - uses.reduce((s, u) => s + u[1], 0);
-  const tape = (ask) => figTapes([{ s: '1年の予算', segs: [...uses.map(([a, p], i) => ({ w: p, s: i === k ? (ask === 'r' ? '□%' : `${p}%`) : p >= 15 ? a.split(' ')[0] : '', cls: i === k ? 'sh2' : 'sh' })), { w: rest, s: 'そのほか', cls: 'sh3' }], total: `${B}億円` }], { label: '予算の使い道のテープ図 (例)' });
   const dl = (ask) => figDoubleLine({ top: '金額 (億円)', bot: '割合', cols: [{ pos: 0, t: '0', b: '0%' }, { pos: r, t: String(part), b: `${r}%`, ut: ask === 'part', ub: ask === 'r' }, { pos: 100, t: String(B), b: '100%' }], arrows: [], label: '金額と割合の二本の数直線' });
   const note = '<small>ある市の予算の例です (数字は計算しやすくしたもの)。</small>';
+  const pc = [PAL.coral, PAL.purple, PAL.teal];
+  const pie = (askR) => figPie([...uses.map(([a, p], i) => ({ v: p, s: i === k ? `${a.split(' ')[0]} ${askR ? '□' : p}%` : `${a.split(' ')[0]} ${p}%`, sub: i === k ? (askR ? `${part}億円` : '□億円') : '', c: i === k ? PAL.gold : pc[i], in: i === k ? (askR ? '□%' : `${p}%`) : '' })), { v: rest, s: `そのほか ${rest}%`, c: PAL.gray }], { label: '予算の使い道の円グラフ (例)' });
   if (rnd() < 0.6) return { html: `ある市の 1年の予算は ${B}億円。そのうち ${r}% を ${what} に使います。${what.split(' ')[0]} に使うお金は <b class="box">□</b> 億円`, text: `予算${B}億円の${r}% → □億円`, slots: [slot(part, '億円')],
     explain: () => [
-      { fig: tape('part'), text: `予算 (100%) を、使い道ごとに 分けます。${what.split(' ')[0]} は そのうちの ${r}%。<br>${note}`, lesson: 'tax' },
+      { fig: pie(), text: `予算 (100%) を、使い道ごとに 分けます。${what.split(' ')[0]} は そのうちの ${r}%。<br>${note}`, lesson: 'tax' },
       { fig: dl('part'), text: `${r}% は 小数で ${r / 100}。もとにする量 × 割合 = くらべる量 なので、${B} × ${r / 100} = <b>${part}億円</b>` },
     ] };
   return { html: `ある市の 1年の予算は ${B}億円。そのうち ${part}億円 を ${what} に使います。これは 予算全体の <b class="box">□</b> %`, text: `${B}億円のうち${part}億円 → □%`, slots: [slot(r, '%')],
     explain: () => [
-      { fig: tape('r'), text: `全体 ${B}億円 を 100% として、${part}億円 が 何% にあたるかを考えます。<br>${note}`, lesson: 'tax' },
+      { fig: pie(true), text: `全体 ${B}億円 を 100% として、${part}億円 が 何% にあたるかを考えます。<br>${note}`, lesson: 'tax' },
       { fig: dl('r'), text: `割合 = くらべる量 ÷ もとにする量 = ${part} ÷ ${B} = ${r / 100}。百分率にすると × 100 で <b>${r}%</b>` },
     ] };
 };
@@ -2231,7 +2382,7 @@ GEN.t_per = () => {
     const P = pick([2, 3, 4, 5]); const per = ri(Math.ceil(lo / P / 10), Math.floor(hi / P / 10)) * 10; const T = per * P; // T 万円、P 万人、per 円/人
     return { html: `${what} に ${man(T)}円 かかります。市の人 ${P}万人 で 分けると、1人あたり <b class="box">□</b> 円`, text: `${T}万円 ÷ ${P}万人 → 1人あたり□円`, slots: [slot(per, '円')],
       explain: () => [
-        { fig: figTapes([{ s: 'かかるお金', segs: Array.from({ length: P }, (_, i) => ({ w: 1, s: '1万人分', cls: i === 0 ? 'sh2' : 'sh' })), total: `${man(T)}円` }], { label: '全体を人数で分けるテープ図' }),
+        { fig: (() => { let b = icon('pot', 6, 10, 84) + svgText(48, 112, `${man(T)}円`, 'b'); const gw = Math.min(90, 420 / P); for (let g = 0; g < P; g++) { const x = 110 + g * gw; for (let i = 0; i < 4; i++) b += icon('person', x + (i % 2) * 22, 14 + Math.floor(i / 2) * 34, 26, { c: PEOPLE[(g + i) % 5] }); b += `<rect x="${r1(x - 4)}" y="8" width="${r1(gw - 10)}" height="80" rx="8" fill="none" stroke="${PAL.grayD}" stroke-dasharray="4 3"/>` + svgText(x + gw / 2 - 9, 104, '1万人', 's') + svgText(x + gw / 2 - 9, 120, `${man(per)}円`, g === 0 ? 'm' : 's'); } return svgBox(540, 128, b, '全体を1万人ずつのまとまりに分ける図'); })(),
           text: `みんなの税金で はらうお金も、1人あたりに 直すと 身近になります。全体 ÷ 人数 = 1人あたり。<br>${P}万人 を「1万人の まとまり ${P}こ」と見ると、1万人分は ${man(T)}円 ÷ ${P} = <b>${man(per)}円</b>。`, lesson: 'tax' },
         { fig: ueq([['単位の式', `${uqHTML(uq(T, '万円'))}${uop('÷')}${uqHTML(uq(P, '万人'))}${uop('=')}${uqHTML(uq(per, '円', 1, '人'))}`, 'all']], '万 と 万 は 消しあう'),
           text: `1万人で ${man(per)}円 なら、1人では その 1万分の1 で <b>${per}円</b>。<br>「万円 ÷ 万人」は、上と下の 万 が 消しあって「円 ÷ 人」になります。<br><small>たしかめ: ${(T * 10000).toLocaleString('ja-JP')}円 ÷ ${(P * 10000).toLocaleString('ja-JP')}人 = ${per}円。数字は例です。</small>` },
@@ -2268,64 +2419,6 @@ GEN.t_year = () => {
         text: `1年は 12か月 なので、${(M * 1000).toLocaleString('ja-JP')}円/か月 × 12か月 = <b>${Y.toLocaleString('ja-JP')}円</b>。<br>1回は 小さくても、1年分 あつめると 大きな金額です。日本中で あつまった消費税は、年金・医療・介護・子育てに 使われることになっています。` },
     ] };
 };
-function moneyWhatFrames() {
-  return [
-    { fig: figTable(['持っている物', 'ほしい物'], [['さかな', 'パン'], ['パン', 'くつ'], ['くつ', 'さかな']]),
-      text: '<b>お金がなかったら？</b><br>むかしは 物と物を とりかえる「物々交換」をしていました。でも、さかなを持っている人が パンをほしくても、パン屋さんが ほしいのは くつ…。<br>おたがいに ほしい物が ぴったり合う相手を さがすのは、とても たいへんです。' },
-    { fig: figFlow([{ s: 'さかな', sub: '売る' }, { s: 'お金', cls: 'sh3' }, { s: 'パン', sub: '買う' }], { arrows: ['→', '→'], label: 'お金をなかだちにする交換' }),
-      text: '<b>お金が「なかだち」をする</b><br>さかなを いったん お金にかえておけば、そのお金で だれからでも パンが買えます。お金は、だれとでも 交換できる 道具です。' },
-    { fig: figFlow([{ s: '交換する', sub: '物やサービスと\nとりかえる' }, { s: 'ねうちを はかる', sub: 'ねだんで\nくらべられる', cls: 'sh3' }, { s: 'ためておく', sub: 'くさらずに\nとっておける', cls: 'sh2' }], { label: 'お金の3つのやくわり' }),
-      text: '<b>お金の 3つのやくわり</b><br>① 交換する: 物やサービスと とりかえる。<br>② ねうちを はかる: 「120円」のように、ちがう物どうしの ねうちを 同じものさしで くらべられる (単位の「円」と同じ考え方です)。<br>③ ためておく: さかなは くさるけれど、お金は とっておいて あとで使えます。' },
-    { fig: figTable(['', 'つくるところ', 'れい'], [['お札 (紙へい)', '日本銀行が発行', '1万円・5千円・千円 など'], ['こうか (コイン)', '国 (政府) が発行', '500円・100円・10円 など'], ['電子マネー・カード', 'お金のデータを やりとり', 'ICカード・スマホ']]),
-      text: '<b>お金の いろいろな形</b><br>日本のお札は 日本銀行、コインは 国が発行しています。お札の紙そのものの ねうちは 小さいのに 1万円として使えるのは、「みんなが 1万円として うけとる」と 信じているから (信用) です。<br>電子マネーは、目に見えなくても 同じ「円」のデータを やりとりしています。' },
-    { fig: figFlow([{ s: '家', sub: 'はたらいて\nきゅうりょう' }, { s: 'お店・会社', sub: '物を売って\nもうける', cls: 'sh3' }, { s: '国・市', sub: '税金で 学校や\n道路をつくる', cls: 'sh2' }], { arrows: ['買い物', '税金'], back: 'お金は ぐるぐる めぐっている', label: 'お金のめぐり' }),
-      text: '<b>お金は めぐっている</b><br>家の人は はたらいて きゅうりょうをもらい、買い物をします。お店や会社は そのお金で きゅうりょうを はらいます。消費税などの 税金は、学校・道路・病院など みんなのために使われます。' },
-  ];
-}
-function priceFrames() {
-  const parts = [['材料', 60, 'sh'], ['作る人の きゅうりょう', 50, 'sh3'], ['運ぶ・店の電気', 30, 'sh'], ['お店の もうけ', 40, 'sh2'], ['消費税', 18, 'cut']];
-  return [
-    { fig: figTapes([{ s: 'パン1こ', segs: parts.map(([a, w, c]) => ({ w, s: a.split(' ')[0].replace('作る人の', '人'), cls: c })), total: '198円' }], { label: 'パンのねだんの内わけ' }) + figTable(['', '円 (例)'], parts.map(([a, w]) => [a, w]).concat([['ねだん', '<b>198</b>']]), { sumRow: parts.length }),
-      text: '<b>ねだんの 中身</b><br>パン 1こ のねだんには、材料だけでなく、作る人の きゅうりょう、運ぶお金、お店の電気代、お店の もうけ、そして 消費税が 入っています (数字は例)。<br>どれかが 高くなると、ねだんも 上がりやすくなります。' },
-    { fig: figSupplyDemand(),
-      text: '<b>ほしい人の数 と 売りたい数</b><br>ねだんが 安いほど ほしい人は ふえ、高いほど 売りたい人 (作りたい人) は ふえます。<br>この 2つが ちょうど つりあうところで、ねだんが 決まりやすくなります。これを「需要 (ほしい) と 供給 (売りたい)」といいます。' },
-    { fig: figSupplyDemand('demand'),
-      text: '<b>ほしい人が ふえると</b><br>暑い日の アイス、雨の日の かさ のように、ほしい人が 急に ふえると、ねだんは 上がりやすくなります。<br>反対に、野菜が たくさん とれた年 (売りたい数が ふえた) は、ねだんが 下がりやすくなります。' },
-    { fig: figTable(['同じ物でも…', 'ねうちが 高く感じる', 'ねうちが 低く感じる'], [['水 1本', 'のどが からから、山の上', '家に水道がある'], ['かさ', '急な 大雨', '晴れの日'], ['マンガ', '読みたかった 新刊', 'もう持っている']]),
-      text: '<b>ねうちは 人や場面で かわる</b><br>同じ物でも、だれが・いつ・どこで 使うかで、ねうち (どれだけ ほしいか) は かわります。<br>だから 買う前に「わたしにとって このねだんの ねうちがあるか」を 考えることが 大切です。' },
-    { fig: figTable(['くらべ方', '何に そろえる', 'れい'], [['1あたりの ねだん', '100 g・1こ・1 m', '円/100g'], ['まとめ買い', '使う数', '食べきれる？'], ['割引き・ポイント', 'はらう金額', '何% 引き？']]),
-      text: '<b>まとめ: かしこい 買い物</b><br>・ねだんの中身 (材料・人・運ぶ・もうけ・税) を 知る。<br>・ねだんは ほしい人と 売りたい数の つりあいで かわる。<br>・くらべるときは「1あたり」に そろえる (単位も計算する)。<br>・安さだけでなく、ほんとうに 使うかどうかも 考える。' },
-  ];
-}
-function currencyFrames() {
-  return [
-    { fig: figTable(['国・地いき', '通貨', 'きごう'], [['日本', '円', '¥'], ['アメリカ', 'ドル', '$'], ['ヨーロッパの 多くの国', 'ユーロ', '€'], ['イギリス', 'ポンド', '£'], ['中国', '元 (人民元)', '¥ (元)'], ['韓国', 'ウォン', '₩']]),
-      text: '<b>国ごとに ちがう お金 (通貨)</b><br>日本は 円、アメリカは ドル のように、国や地いきごとに 使うお金が ちがいます。<br>外国で 買い物をするときは、円を その国の お金に とりかえます (両替)。' },
-    { fig: rateFig('円', 'ドル', [{ pos: 1, t: '150', b: '1' }, { pos: 10, t: '1500', b: '10' }]),
-      text: '<b>為替レート = 1ドル あたり 何円</b><br>「1ドル = 150円」なら、10ドル は 1500円 です。レートは「1あたりの量」(円/ドル) なので、速さや 密度と 同じように 二本の数直線で 考えられます。<br>レートは 毎日 少しずつ かわります (ここの数字は例です)。' },
-    { fig: figTapes([{ s: '1ドル = 150円', segs: [{ w: 150, s: '150円' }] }, { s: '1ドル = 120円', segs: [{ w: 120, s: '120円', cls: 'sh3' }], total: '円高' }, { s: '1ドル = 180円', segs: [{ w: 180, s: '180円', cls: 'sh2' }], total: '円安' }], { label: '1ドルに必要な円のテープ図' }),
-      text: '<b>円高 と 円安</b><br>1ドル を手に入れるのに 必要な円が 少なくなる (150円 → 120円) のが <b>円高</b>: 円の ねうちが 上がった。<br>多く必要になる (150円 → 180円) のが <b>円安</b>: 円の ねうちが 下がった。<br>数字が 小さくなるのに「高」なので、「円の 力が 強くなった」と 考えると わかりやすいです。' },
-    { fig: figTable(['', '円高', '円安'], [['外国旅行', 'とく', 'そん'], ['輸入 (外国から買う)', '安くなりやすい', '高くなりやすい'], ['輸出 (外国へ売る)', 'もうけが へりやすい', 'もうけが ふえやすい']]),
-      text: '<b>だれが とく？ そん？</b><br>円高・円安は、どちらが よい とは決まっていません。旅行する人、外国から物を買う会社、外国へ物を売る会社で、とく・そんが 反対になります。' },
-    { fig: ueq([['円 → ドル', `${uqHTML(uq(3000, '円'))}${uop('÷')}${uqHTML(uq(150, '円', 1, 'ドル'))}${uop('=')}${uqHTML(uq(20, 'ドル'))}`, 'all'], ['ドル → 円', `${mulChain([uq(20, 'ドル'), uq(150, '円', 1, 'ドル')])}${uop('=')}${uqHTML(uq(3000, '円'))}`, 'all']], '単位の式で 両替'),
-      text: '<b>まとめ: 両替も 単位の計算</b><br>ドル → 円 は レート (円/ドル) を かける、円 → ドル は レートで わる。どちらにするか まよったら、単位が 消えて ほしい通貨が のこるかを たしかめましょう。' },
-  ];
-}
-function savingsFrames() {
-  return [
-    { fig: figFlow([{ s: 'あずける人', sub: 'お金を\nあずける' }, { s: '銀行', sub: 'お金を\nかす', cls: 'sh3' }, { s: 'かりる人・会社', sub: '利息をつけて\nかえす' }], { arrows: ['あずける', 'かす'], back: '利息の一部が あずけた人へ', label: '銀行のしくみ' }),
-      text: '<b>銀行の しくみ</b><br>銀行は、みんなから あずかったお金を、家を買う人や 会社に かします。かりた人は「かりたお礼」として 利息をつけて かえします。その一部が、あずけた人への 利息になります。' },
-    { fig: figTapes([0, 1, 2, 3].map((y) => ({ s: `${y}年後`, segs: [{ w: 100, s: '10000' }, ...(y ? [{ w: 10 * y, s: `+${500 * y}`, cls: 'sh2' }] : [])] })), { label: '毎年同じだけ利息がつくテープ図' }),
-      text: '<b>利息の計算 (単利)</b><br>10000円 を 1年に 5% で あずけると、1年の利息は 10000 × 0.05 = 500円。毎年 はじめの 10000円 にだけ 利息がつくなら、3年で 500 × 3 = 1500円。<br><small>本当の預金の利率は もっと低いことが多く、税金も ひかれます。数字は 計算しやすい例です。</small>' },
-    { fig: figTapes([{ s: 'はじめ', segs: [{ w: 100, s: '10000' }] }, { s: '1年後', segs: [{ w: 100, s: '10000' }, { w: 10, s: '+1000', cls: 'sh2' }] }, { s: '2年後', segs: [{ w: 110, s: '11000' }, { w: 11, s: '+1100', cls: 'sh2' }] }, { s: '3年後', segs: [{ w: 121, s: '12100' }, { w: 12.1, s: '+1210', cls: 'sh2' }] }], { label: '利息に利息がつくテープ図' }),
-      text: '<b>利息にも 利息がつく (複利)</b><br>1年に 10% ふえると、1年後 11000円。次の年は 11000円 全体が もとになるので 利息は 1100円、その次は 1210円…。<br>ふえ方が だんだん 大きくなります。長い間 ためるほど ちがいが 大きくなります。' },
-    { fig: figTable(['', 'ためる (あずける)', 'かりる (ローン・あとばらい)'], [['利息', 'もらう', 'はらう'], ['長くなると', 'ふえる', 'はらう分が ふえる'], ['気をつけること', 'すぐ使えない お金もある', '返す計画を 先に立てる']]),
-      text: '<b>かりるときは 反対</b><br>お金を かりると、利息を はらいます。返すのが おそいほど、はらう利息は ふえます。<br>カードの「あとばらい」や 分割ばらいも、手数料 (利息のようなもの) が つくことがあります。' },
-    { fig: figFlow([{ s: 'もらう', sub: 'おこづかい\nお年玉' }, { s: 'わける', sub: 'つかう・ためる\n(だれかのために)', cls: 'sh3' }, { s: 'ふりかえる', sub: 'おこづかい帳\nで計算', cls: 'sh2' }], { label: 'お金の使い方のサイクル' }),
-      text: '<b>まとめ: 自分のお金を どう使う？</b><br>もらったお金を「今つかう」「ためて あとで使う」に 分けて、おこづかい帳で 計算してみましょう。<br>パーセントや 利息の計算は、大人になって 貯金や ローンを えらぶときに そのまま 役立ちます。' },
-  ];
-}
-
 function figTapes(rows, o = {}) {
   const W = 540, x0 = 104, TW = 400;
   const max = o.max || Math.max(...rows.map((r) => r.segs.reduce((a, s) => a + s.w, 0)));
@@ -2389,23 +2482,130 @@ function orderWhyFrames() {
       text: '<b>まとめ</b><br>× ÷ は「同じ数のまとまり」を作ったり分けたりして、1つの数を作る計算。+ − は、できた数どうしを あわせたり とったりする計算。<br>だから、<b>まず まとまり (× ÷) を作り、それから あわせる・とる (+ −)</b>。かっこは、自分で「ここを先に」と決めた まとまりです。<br>この順番は、式の意味 (お話) を 1つに決めるための、みんなの約束です。' },
   ];
 }
-function taxFrames() {
+function moneyWhatFrames() {
+  const barter = (() => {
+    const W = 540; let b = '';
+    const nm = { fish: 'さかな', bread: 'パン', shoe: 'くつ' };
+    const P = [{ x: 90, c: PEOPLE[0], has: 'fish', want: 'bread' }, { x: 270, c: PEOPLE[1], has: 'bread', want: 'shoe' }, { x: 450, c: PEOPLE[2], has: 'shoe', want: 'fish' }];
+    P.forEach((p) => {
+      b += icon('thinking', p.x + 4, 0, 54) + icon(p.want, p.x + 15, 5, 30);
+      b += icon('person', p.x - 44, 44, 64, { c: p.c }) + icon(p.has, p.x + 6, 80, 36);
+      b += svgText(p.x, 136, `${nm[p.has]} を もっている`, 's') + svgText(p.x, 152, `${nm[p.want]} が ほしい`, 'b');
+    });
+    b += arrowTo(130, 186, 230, 186, '', 0) + `<text x="180" y="180" text-anchor="middle" class="m big">✕</text>`;
+    b += svgText(180, 210, '「さかなと パンを かえて」→「くつなら いいよ」', 's');
+    b += svgText(450, 196, 'ぴったり合う 相手が', 's') + svgText(450, 212, 'なかなか 見つからない', 's');
+    return svgBox(W, 222, b, '物々交換の図');
+  })();
   return [
-    { fig: figFlow([{ s: 'みんな', sub: '家の人・会社' }, { s: '国・県・市', sub: 'あつめて\n使い道を決める', cls: 'sh3' }, { s: 'みんなのしごと', sub: '学校・道路\n消防・病院', cls: 'sh2' }], { arrows: ['税金', '使う'], back: '使い道は、選挙で選ばれた人が 話し合って決める', label: '税金の流れ' }),
+    { fig: barter,
+      text: '<b>お金がなかったら？</b><br>むかしは 物と物を とりかえる「物々交換」をしていました。でも、さかなを持っている人が パンをほしくても、パン屋さんが ほしいのは くつ…。<br>おたがいに ほしい物が ぴったり合う相手を さがすのは、とても たいへんです。' },
+    { fig: figIconFlow([{ ic: 'fish', s: 'さかな' }, { ic: 'coin', s: 'お金', o: { s: '円' } }, { ic: 'bread', s: 'パン' }], { arrows: ['売る', '買う'], label: 'お金をなかだちにする交換' }),
+      text: '<b>お金が「なかだち」をする</b><br>さかなを いったん お金にかえておけば、そのお金で だれからでも パンが買えます。お金は、だれとでも 交換できる 道具です。' },
+    { fig: figCards([{ ic: 'swap', s: '① 交換する', sub: '物やサービスと\nとりかえる' }, { ic: 'ruler', s: '② ねうちを はかる', sub: '「120円」のように\n同じものさしで くらべる' }, { ic: 'piggy', s: '③ ためておく', sub: 'くさらずに\nあとで使える' }], { label: 'お金の3つのやくわり' }),
+      text: '<b>お金の 3つのやくわり</b><br>① 交換する: 物やサービスと とりかえる。<br>② ねうちを はかる: 「120円」のように、ちがう物どうしの ねうちを 同じものさしで くらべられる (単位の「円」と同じ考え方です)。<br>③ ためておく: さかなは くさるけれど、お金は とっておいて あとで使えます。' },
+    { fig: figCards([{ ic: 'bill', s: 'お札', sub: '日本銀行が つくる\n1万円・5千円・千円', o: { s: '10000', size: 18, c: '#B9A6E0' } }, { ic: 'coin', s: 'コイン', sub: '国 (政府) が つくる\n500円・100円・10円など', o: { s: '500', size: 26, c: '#E8C766' } }, { ic: 'phone', s: '電子マネー', sub: 'お金の データを\nやりとりする' }], { label: 'お金のいろいろな形' }),
+      text: '<b>お金の いろいろな形</b><br>日本のお札は 日本銀行、コインは 国が発行しています。お札の紙そのものの ねうちは 小さいのに 1万円として使えるのは、「みんなが 1万円として うけとる」と 信じているから (信用) です。<br>電子マネーは、目に見えなくても 同じ「円」のデータを やりとりしています。' },
+    { fig: figCycle([{ ic: 'house', s: '家', x: 270, y: 50 }, { ic: 'shop', s: 'お店・会社', x: 90, y: 230 }, { ic: 'city', s: '国・市', x: 450, y: 230 }],
+      [{ a: 0, b: 1, s: '買い物', bend: 46 }, { a: 1, b: 0, s: 'きゅうりょう', bend: 46 }, { a: 0, b: 2, s: '税金', bend: -46 }, { a: 2, b: 0, s: '学校・道路', bend: -46 }, { a: 1, b: 2, s: '税金', bend: 0 }], { H: 290, label: 'お金のめぐり' }),
+      text: '<b>お金は めぐっている</b><br>家の人は はたらいて きゅうりょうをもらい、買い物をします。お店や会社は そのお金で きゅうりょうを はらいます。家も会社も 税金を おさめ、税金は 学校・道路・病院など みんなのために使われます。', lesson: 'tax' },
+  ];
+}
+function priceFrames() {
+  const parts = [['材料', 60, PAL.orange], ['作る人の きゅうりょう', 50, PAL.blue], ['運ぶ・店の電気', 30, PAL.teal], ['お店の もうけ', 40, PAL.gold], ['消費税', 18, PAL.coral]];
+  const loaf = (() => {
+    const W = 540, x0 = 20, w = 500, tot = 198; let b = '', x = x0;
+    b += `<path d="M${x0} 120 V70 Q${x0} 20 ${x0 + 60} 20 H${x0 + w - 60} Q${x0 + w} 20 ${x0 + w} 70 V120 Z" fill="${PAL.orange}" stroke="${PAL.ink}" stroke-width="2"/>`;
+    parts.forEach(([s, v, c], i) => { const ww = v / tot * w; b += `<rect x="${r1(x)}" y="46" width="${r1(ww)}" height="74" fill="${c}" stroke="${PAL.ink}" stroke-width="1.5"/>`; b += `<text x="${r1(x + ww / 2)}" y="90" text-anchor="middle" class="ict" style="font-size:15px;fill:${PAL.ink}">${v}円</text>`; b += svgText(x + ww / 2, 142 + (i % 2) * 18, s.replace('作る人の ', ''), 's'); x += ww; });
+    b += svgText(W / 2, 14, 'パン 1こ 198円 を、中身ごとに 切ってみると (例)', 'b');
+    return svgBox(W, 176, b, 'パンのねだんの内わけ');
+  })();
+  return [
+    { fig: loaf,
+      text: '<b>ねだんの 中身</b><br>パン 1こ のねだんには、材料だけでなく、作る人の きゅうりょう、運ぶお金、お店の電気代、お店の もうけ、そして 消費税が 入っています (数字は例)。<br>どれかが 高くなると、ねだんも 上がりやすくなります。' },
+    { fig: figScale(4, 4, { label: 'ほしい人と品物がつりあうてんびん' }),
+      text: '<b>ほしい人 と 売りたい品物 の つりあい</b><br>ねだんが 安いほど ほしい人は ふえ、高いほど 売りたい人 (作りたい人) は ふえます。<br>この 2つが ちょうど つりあうところで、ねだんが 決まりやすくなります。これを「需要 (ほしい) と 供給 (売りたい)」といいます。' },
+    { fig: figScale(8, 3, { goods: 'umbrella', label: 'ほしい人が多いてんびん' }) + figScale(2, 8, { goods: 'bread', tag: 'ねだん ↓ 下がる', label: '品物が多いてんびん' }),
+      text: '<b>ほしい人が ふえると</b><br>急な大雨の日の かさ のように、ほしい人が 急に ふえると、てんびんが かたむいて ねだんは 上がりやすくなります。<br>反対に、たくさん作りすぎて 売りたい品物が あまっているときは、ねだんが 下がりやすくなります。' },
+    { fig: figCards([{ ic: 'water', s: '水 1本', sub: '山の上で からから → 高い\n家に水道がある → 低い' }, { ic: 'umbrella', s: 'かさ', sub: '急な 大雨 → 高い\n晴れの日 → 低い' }, { ic: 'book', s: 'マンガ', sub: '読みたかった新刊 → 高い\nもう持っている → 低い' }], { label: '場面でかわるねうち' }),
+      text: '<b>ねうちは 人や場面で かわる</b><br>同じ物でも、だれが・いつ・どこで 使うかで、ねうち (どれだけ ほしいか) は かわります。<br>だから 買う前に「わたしにとって このねだんの ねうちがあるか」を 考えることが 大切です。' },
+    { fig: figCards([{ ic: 'ruler', s: '1あたりで くらべる', sub: '100 g・1こ あたりの\nねだんに そろえる' }, { ic: 'bag', s: '割引きを 計算', sub: '何% 引き？\nはらうのは いくら？' }, { ic: 'thinking', s: 'ほんとうに 使う？', sub: 'まとめ買い・安いから\nだけで 決めない' }], { label: 'かしこい買い物' }),
+      text: '<b>まとめ: かしこい 買い物</b><br>・ねだんの中身 (材料・人・運ぶ・もうけ・税) を 知る。<br>・ねだんは ほしい人と 売りたい品物の つりあいで かわる。<br>・くらべるときは「1あたり」に そろえる (単位も計算する)。<br>・安さだけでなく、ほんとうに 使うかどうかも 考える。' },
+  ];
+}
+function currencyFrames() {
+  const cur = (s, sub, c) => ({ ic: 'coin', s, sub, o: { s: sub.split(' ')[0], size: 30, c } });
+  const dollarEq = (yenV, tag, cls) => { const [row, w] = moneyRow(yenV, 140, 0, { sz: 40 }); return { row, w, tag, cls, yenV }; };
+  const rates = (rows, label) => {
+    const W = 540; let b = '';
+    rows.forEach((r, i) => { const y = 10 + i * 62; const [row, w] = moneyRow(r.yenV, 130, y, { sz: 40 }); b += icon('coin', 20, y, 44, { s: '$1', size: 22, c: '#9FD3A8' }) + svgText(94, y + 28, '=', 'b big') + row + svgText(150 + w, y + 28, `${r.yenV}円`, 'b', 'start') + (r.tag ? svgText(W - 10, y + 28, r.tag, r.cls || 'b', 'end') : ''); });
+    return svgBox(W, rows.length * 62 + 10, b, label);
+  };
+  return [
+    { fig: figCards([cur('日本', '¥ 円', PAL.gold), cur('アメリカ', '$ ドル', '#9FD3A8'), cur('ヨーロッパ', '€ ユーロ', PAL.sky), cur('イギリス', '£ ポンド', PAL.pink), cur('中国', '元 人民元', PAL.coral), cur('韓国', '₩ ウォン', PAL.purple)], { cols: 3, isz: 46, label: '国ごとの通貨' }),
+      text: '<b>国ごとに ちがう お金 (通貨)</b><br>日本は 円、アメリカは ドル のように、国や地いきごとに 使うお金が ちがいます。<br>外国で 買い物をするときは、円を その国の お金に とりかえます (両替)。' },
+    { fig: rates([{ yenV: 150 }], '1ドルと150円') + rateFig('円', 'ドル', [{ pos: 1, t: '150', b: '1' }, { pos: 10, t: '1500', b: '10' }]),
+      text: '<b>為替レート = 1ドル あたり 何円</b><br>「1ドル = 150円」なら、1ドルと 100円玉 1まい + 50円玉 1まい が 同じねうち。10ドル は 1500円 です。<br>レートは「1あたりの量」(円/ドル) なので、速さや 密度と 同じように 二本の数直線で 考えられます。レートは 毎日 少しずつ かわります (ここの数字は例です)。' },
+    { fig: rates([{ yenV: 120, tag: '円高', cls: 'm' }, { yenV: 150, tag: '' }, { yenV: 180, tag: '円安', cls: 'm' }], '1ドルに必要な円'),
+      text: '<b>円高 と 円安</b><br>1ドル を手に入れるのに 必要な円が 少なくなる (150円 → 120円) のが <b>円高</b>: 円の ねうちが 上がった。<br>多く必要になる (150円 → 180円) のが <b>円安</b>: 円の ねうちが 下がった。<br>数字が 小さくなるのに「高」なので、「円の 力が 強くなった」と 考えると わかりやすいです。' },
+    { fig: figCards([{ ic: 'plane', s: '外国旅行', sub: '円高 → とく\n円安 → そん' }, { ic: 'shipIn', s: '輸入 (外国から買う)', sub: '円高 → 安くなりやすい\n円安 → 高くなりやすい' }, { ic: 'company', s: '輸出 (外国へ売る)', sub: '円高 → もうけ へりやすい\n円安 → もうけ ふえやすい' }], { label: '円高円安でとくする人・そんする人' }),
+      text: '<b>だれが とく？ そん？</b><br>円高・円安は、どちらが よい とは決まっていません。旅行する人、外国から物を買う会社、外国へ物を売る会社で、とく・そんが 反対になります。' },
+    { fig: ueq([['円 → ドル', `${uqHTML(uq(3000, '円'))}${uop('÷')}${uqHTML(uq(150, '円', 1, 'ドル'))}${uop('=')}${uqHTML(uq(20, 'ドル'))}`, 'all'], ['ドル → 円', `${mulChain([uq(20, 'ドル'), uq(150, '円', 1, 'ドル')])}${uop('=')}${uqHTML(uq(3000, '円'))}`, 'all']], '単位の式で 両替'),
+      text: '<b>まとめ: 両替も 単位の計算</b><br>ドル → 円 は レート (円/ドル) を かける、円 → ドル は レートで わる。どちらにするか まよったら、単位が 消えて ほしい通貨が のこるかを たしかめましょう。' },
+  ];
+}
+function savingsFrames() {
+  const leg = [{ c: PAL.gold, s: 'あずけたお金' }, { c: PAL.coral, s: '1年目の利息' }, { c: PAL.purple, s: '2年目の利息' }, { c: PAL.teal, s: '3年目の利息' }];
+  return [
+    { fig: figIconFlow([{ ic: 'person', s: 'あずける人', o: { c: PEOPLE[0] } }, { ic: 'bank', s: '銀行' }, { ic: 'company', s: 'かりる人・会社' }], { arrows: ['あずける', 'かす'], back: '利息をつけて かえす → その一部が あずけた人へ', label: '銀行のしくみ' }),
+      text: '<b>銀行の しくみ</b><br>銀行は、みんなから あずかったお金を、家を買う人や 会社に かします。かりた人は「かりたお礼」として 利息をつけて かえします。その一部が、あずけた人への 利息になります。' },
+    { fig: figColumns([0, 1, 2, 3].map((y) => ({ s: `${y}年後`, base: 10000, add: y ? Array.from({ length: y }, (_, i) => ({ v: 500, c: leg[i + 1].c })) : [], top: `${(10000 + 500 * y).toLocaleString('ja-JP')}円` })), { max: 12000, legend: leg, label: '毎年同じだけ利息がつく柱の図' }),
+      text: '<b>利息の計算 (単利)</b><br>10000円 を 1年に 5% で あずけると、1年の利息は 10000 × 0.05 = 500円。毎年 はじめの 10000円 にだけ 利息がつくなら、柱は 毎年 同じ高さ (500円) ずつ のびて、3年で 1500円。<br><small>本当の預金の利率は もっと低いことが多く、税金も ひかれます。数字は 計算しやすい例です。</small>' },
+    { fig: figColumns([{ s: 'はじめ', base: 10000, top: '10,000円' }, { s: '1年後', base: 10000, add: [{ v: 1000, c: leg[1].c }], top: '11,000円' }, { s: '2年後', base: 10000, add: [{ v: 1000, c: leg[1].c }, { v: 1100, c: leg[2].c }], top: '12,100円' }, { s: '3年後', base: 10000, add: [{ v: 1000, c: leg[1].c }, { v: 1100, c: leg[2].c }, { v: 1210, c: leg[3].c }], top: '13,310円' }], { max: 14000, legend: leg, label: '利息に利息がつく柱の図' }),
+      text: '<b>利息にも 利息がつく (複利)</b><br>1年に 10% ふえると、1年後 11000円。次の年は 11000円 全体が もとになるので 利息は 1100円、その次は 1210円…。<br>色のついた 利息の だんが、年ごとに 少しずつ 厚くなっていきます。長い間 ためるほど ちがいが 大きくなります。' },
+    { fig: figCards([{ ic: 'piggy', s: 'ためる (あずける)', sub: '利息を もらう\n長いほど ふえる', cls: 'sh' }, { ic: 'card', s: 'かりる (ローン・あとばらい)', sub: '利息を はらう\nおそいほど はらう分が ふえる', cls: 'sh2' }], { cols: 2, label: 'ためるとかりるの反対' }),
+      text: '<b>かりるときは 反対</b><br>お金を かりると、利息を はらいます。返すのが おそいほど、はらう利息は ふえます。<br>カードの「あとばらい」や 分割ばらいも、手数料 (利息のようなもの) が つくことがあります。' },
+    { fig: figIconFlow([{ ic: 'gift', s: 'もらう', sub: 'おこづかい\nお年玉' }, { ic: 'jar', s: 'わける', sub: 'つかう・ためる\nだれかのために', o: { n: 4 } }, { ic: 'note', s: 'ふりかえる', sub: 'おこづかい帳\nで計算' }], { label: 'お金の使い方のサイクル' }),
+      text: '<b>まとめ: 自分のお金を どう使う？</b><br>もらったお金を「今つかう」「ためて あとで使う」に 分けて、おこづかい帳で 計算してみましょう。<br>パーセントや 利息の計算は、大人になって 貯金や ローンを えらぶときに そのまま 役立ちます。' },
+  ];
+}
+function taxFrames() {
+  const potFig = (() => {
+    const W = 540; let b = '';
+    for (let i = 0; i < 5; i++) { const x = 18 + i * 44; b += icon('person', x, 10, 40, { c: PEOPLE[i] }) + icon('coin', x + 10, 54, 20, { s: '¥', size: 40 }); }
+    b += arrowTo(120, 84, 170, 120, '税金', 0) + icon('pot', 150, 110, 96) + svgText(198, 222, '国・県・市', 'b');
+    [['school', '学校'], ['road', '道路'], ['firetruck', '消防・救急'], ['hospital', '病院']].forEach(([ic, s], i) => { const x = 380 + (i % 2) * 80, y = 20 + Math.floor(i / 2) * 100; b += icon(ic, x, y, 60) + svgText(x + 30, y + 76, s, 's'); });
+    b += arrowTo(250, 150, 372, 110, '使う', -10);
+    return svgBox(W, 232, b, '税金を出しあって使う図');
+  })();
+  const stairs = (() => {
+    const W = 540, base = 200, k = 0.32; let b = '';
+    const ppl = [{ s: 'かせぎ 200万', segs: [[195, 5], [5, 10]] }, { s: 'かせぎ 300万', segs: [[195, 5], [105, 10]] }, { s: 'かせぎ 500万', segs: [[195, 5], [135, 10], [170, 20]] }];
+    const col = { 5: PAL.sky, 10: PAL.gold, 20: PAL.coral };
+    ppl.forEach((p, i) => { const x = 40 + i * 170; let y = base; p.segs.forEach(([v, r]) => { const h = v * k; y -= h; b += `<rect x="${x}" y="${r1(y)}" width="90" height="${r1(h)}" fill="${col[r]}" stroke="${PAL.ink}" stroke-width="1.2"/>`; if (h > 14) b += `<text x="${x + 45}" y="${r1(y + h / 2 + 5)}" text-anchor="middle" class="ict" style="font-size:13px;fill:${PAL.ink}">${r}%</text>`; }); b += svgText(x + 45, base + 18, p.s, 's') + icon('person', x + 100, base - 44, 40, { c: PEOPLE[i] }); });
+    b += svgText(W / 2, 14, 'かせぎの 上の段ほど 高い割合 (かんたんにした例)', 'b');
+    return svgBox(W, base + 28, b, '所得税の段の図');
+  })();
+  const perPerson = (() => {
+    const W = 540; let b = icon('pot', 10, 20, 100) + svgText(60, 140, '市の予算 600億円', 'b');
+    b += arrowTo(120, 70, 190, 70, '÷ 20万人');
+    for (let i = 0; i < 12; i++) b += icon('person', 200 + (i % 6) * 34, 20 + Math.floor(i / 6) * 50, 32, { c: PEOPLE[i % 5] });
+    b += svgText(300, 136, '…ぜんぶで 20万人', 's') + arrowTo(410, 70, 450, 70, '');
+    b += icon('coin', 458, 34, 60, { s: '30万', size: 20 }) + svgText(488, 116, '1人あたり', 'b') + svgText(488, 134, '30万円', 'm');
+    return svgBox(W, 150, b, '1人あたりに直す図 (例)');
+  })();
+  return [
+    { fig: potFig,
       text: '<b>税金ってなに？</b><br>学校・道路・消防のように、1人では 作れないけれど みんなに 必要なものがあります。そのお金を、みんなで 少しずつ 出しあうのが 税金です。<br>あつめたお金を 何に使うかは、選挙で選ばれた人 (国会議員・市議会議員など) が 話し合って決めます。' },
-    { fig: figTable(['税金で 動いているもの', 'たとえば'], [['公立の 小学校・中学校', '授業料は 無料。教科書も 国が 配る'], ['道路・信号・橋', 'だれでも 通れる'], ['消防・救急車', 'よんでも お金は かからない'], ['警察', 'まちの 安全を守る'], ['ごみの 収集・処理', 'まちを きれいにする'], ['図書館・公園', 'だれでも 使える']]),
+    { fig: figCards([{ ic: 'school', s: '公立の小・中学校', sub: '授業料は 無料\n教科書も 国が 配る' }, { ic: 'signal', s: '道路・信号・橋', sub: 'だれでも 通れる' }, { ic: 'firetruck', s: '消防・救急車', sub: 'よんでも\nお金は かからない' }, { ic: 'police', s: '警察', sub: 'まちの 安全を守る' }, { ic: 'garbage', s: 'ごみの収集', sub: 'まちを きれいにする' }, { ic: 'tree', s: '図書館・公園', sub: 'だれでも 使える' }], { label: '税金で動いているもの' }),
       text: '<b>身のまわりの 税金</b><br>毎日 通う学校も、税金で 動いています。先生の きゅうりょう、校舎、教科書などに 税金が 使われています。<br>「ただ (無料)」に見えるものも、本当は みんなが 出しあったお金で できています。' },
-    { fig: figTable(['税金', 'はらうとき', 'おさめる先'], [['消費税', '買い物をしたとき (10%、食べ物は 8%)', '国と 県・市'], ['所得税', 'はたらいて かせいだとき', '国'], ['住民税', 'その まちに 住んでいるとき', '県・市'], ['固定資産税', '土地や 家を 持っているとき', '市'], ['自動車税', '車を 持っているとき', '県']]),
+    { fig: figCards([{ ic: 'bag', s: '消費税', sub: '買い物のとき\n10% (食べ物は 8%)' }, { ic: 'envelope', s: '所得税', sub: 'はたらいて\nかせいだとき → 国' }, { ic: 'house', s: '住民税', sub: 'まちに 住んでいる\n→ 県・市' }, { ic: 'land', s: '固定資産税', sub: '土地や家を\n持っている → 市' }, { ic: 'car', s: '自動車税', sub: '車を 持っている\n→ 県' }, { ic: 'person', s: '子どもも…', sub: 'おかしを買うと\n消費税を はらう', o: { c: PAL.coral } }], { label: 'いろいろな税金' }),
       text: '<b>いろいろな 税金</b><br>子どもも、おかしを買うとき 消費税を はらっています。大人は、かせいだとき (所得税)、住んでいるとき (住民税) などにも はらいます。<br><small>割合や しくみは このアプリを作った時点のもので、かわることがあります。</small>' },
-    { fig: figTapes([
-      { s: 'かせぎ 200万', segs: [{ w: 195, s: '5%' }, { w: 5, s: '', cls: 'sh2' }] },
-      { s: 'かせぎ 300万', segs: [{ w: 195, s: '5%' }, { w: 105, s: '10%', cls: 'sh2' }] },
-      { s: 'かせぎ 500万', segs: [{ w: 195, s: '5%' }, { w: 135, s: '10%', cls: 'sh2' }, { w: 170, s: '20%', cls: 'sh3' }] },
-    ], { label: '所得税の段のテープ図 (かんたんにした例)' }),
-      text: '<b>公平に 出しあう くふう</b><br>所得税は、かせぎを 段に分けて、上の段ほど 高い割合を かけます (5% から 45% まで)。かせぎが多い人ほど、多く はらうしくみです。<br>消費税は、だれが買っても 同じ割合です。だから、かせぎが 少ない人にとっては 重く感じやすい、という 意見もあります。<br><small>本当の計算は、きゅうりょうから いろいろな金額を ひいた残りに かけます。図は かんたんにした例です。</small>', },
-    { fig: figTapes([{ s: '国の予算', segs: [{ w: 33, s: '社会保障', cls: 'sh2' }, { w: 25, s: '借金の返済', cls: 'sh3' }, { w: 16, s: '地方へ', cls: 'sh' }, { w: 26, s: 'そのほか', cls: 'sh' }] }], { label: '国の予算の使い道 (おおよそ)' }) + figTable(['使い道', 'おおよその割合'], [['社会保障 (年金・医療・介護・子育て)', '約 3分の1'], ['国債 (前に かりたお金) の返済など', '約 4分の1'], ['地方 (県・市) へ わたす', '約 6分の1'], ['そのほか (道路・教育・防衛など)', 'のこり']]),
+    { fig: stairs,
+      text: '<b>公平に 出しあう くふう</b><br>所得税は、かせぎを 段に分けて、上の段ほど 高い割合を かけます (5% から 45% まで)。かせぎが多い人ほど、多く はらうしくみです。<br>消費税は、だれが買っても 同じ割合です。だから、かせぎが 少ない人にとっては 重く感じやすい、という 意見もあります。<br><small>本当の計算は、きゅうりょうから いろいろな金額を ひいた残りに かけます。図は かんたんにした例です。</small>' },
+    { fig: figPie([{ v: 33, s: '社会保障 約3分の1', sub: '年金・医療・介護・子育て', c: PAL.coral, in: '1/3' }, { v: 25, s: '借金の返済など 約4分の1', sub: '前に かりたお金 (国債)', c: PAL.purple, in: '1/4' }, { v: 16, s: '地方へ 約6分の1', sub: '県や市に わたす', c: PAL.teal, in: '1/6' }, { v: 26, s: 'そのほか', sub: '道路・教育・防衛など', c: PAL.gold }], { label: '国の予算の使い道 (おおよそ)' }),
       text: '<b>国の お金の 使い道 (おおよそ)</b><br>国の予算で いちばん大きいのは 社会保障 (年金・医療・介護・子育て) で、約3分の1。次に 大きいのは、前に かりたお金 (国債) を 返すための お金で、約4分の1。地方 (県や市) にも わたします。のこりで 道路・教育・防衛などを まかないます。<br>税金だけでは 足りず、国は 借金もしています。<br><small>割合は おおよそで、年によって かわります。</small>' },
-    { fig: ueq([['1人あたり', `${uqHTML(uq(600, '億円'))}${uop('÷')}${uqHTML(uq(20, '万人'))}${uop('=')}${uqHTML(uq(30, '万円', 1, '人'))}`, 'all']], '大きな数は 1人あたりに直す (例)'),
+    { fig: perPerson + ueq([['1人あたり', `${uqHTML(uq(600, '億円'))}${uop('÷')}${uqHTML(uq(20, '万人'))}${uop('=')}${uqHTML(uq(30, '万円', 1, '人'))}`, 'all']], '億 ÷ 万 = 万'),
       text: '<b>まとめ</b><br>・税金は、みんなで出しあって、みんなのために使う お金。<br>・何億円 という 大きな数は、1人あたりに 直すと 身近になる (億 ÷ 万 = 万)。<br>・使い道を 決める人は 選挙で選ぶ。18歳になると 選挙で 自分の考えを 伝えられます。<br>税金の 使われ方を 割合や 1人あたりで 考えられることが、算数の 大事な使い道です。' },
   ];
 }
@@ -2433,6 +2633,11 @@ function makeProblem(type, level) {
 if (typeof module !== 'undefined') module.exports = { Fr, GEN, makeProblem, LESSONS, STAGES, TRACKS, LEVEL_RAMP, levelTypes, judgeSlot, parseAnswer, addSubFrames, mulFrames, divFrames, exprSteps, gridHTML, setRnd: (f) => { rnd = f; } };
 // 改善の記録 (新しい順)。from には きっかけ (保護者の指示・送られたまとめの番号 FB-…) を書く
 const CHANGELOG = [
+  { v: '1.9.1', date: '2026-11-08', title: 'お金の図を 絵で わかりやすく', from: ['保護者の指示 (11/8)'], items: [
+    'お金の読みもの 5つ (27枚) の図を、人・お店・銀行・コイン・お札などの絵で 描き直した',
+    '物々交換の絵、お金がめぐる図、パンを切った ねだんの内わけ、てんびん (ほしい人と品物)、コインで見る円高・円安、のびる柱 (利息)、円グラフ (国の予算)',
+    '問題の解説も: 銀行の流れ、予算の円グラフ、1万人ずつのまとまり',
+  ] },
   { v: '1.9', date: '2026-11-08', title: '税金のしくみ (お金とくらし C4)', from: ['保護者の指示 (11/8)'], items: [
     '読みもの「税金ってなに？」(6枚): 税金の流れ、身のまわりの税金、いろいろな税金、公平に出しあうくふう (所得税の段)、国の予算の使い道、1人あたりに直す',
     'C4 税金のしくみ: 使い道の割合、1人あたりの税金 (億 ÷ 万)、所得税の段の計算、1年の消費税',
