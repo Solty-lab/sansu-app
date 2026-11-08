@@ -1,5 +1,7 @@
 // ===== 保存 =====
-const LS_KEY = 'keisan-tani-v1';
+const CHILD_KEY = 'keisan-tani-v1', TRIAL_KEY = 'keisan-tani-trial';
+// お試しページ (保護者が全機能を試す) は 娘さんの記録と別に保存する
+const LS_KEY = PAGE === 'trial' ? TRIAL_KEY : CHILD_KEY;
 const SESSION_LEN = 10;
 // ===== 点数・メダル・タイム =====
 // 正解 100点 (しくみを見てから正解 50点)、れんぞく正解・自己ベスト・見直しで少しボーナス
@@ -247,13 +249,15 @@ const app = () => document.getElementById('app');
 function header() {
   const tab = (id, label) => `<button data-act="tab" data-v="${id}" aria-pressed="${(view === id || (id === 'home' && ['practice', 'result', 'lesson'].includes(view)))}">${label}</button>`;
   const tabs = PAGE === 'parent' ? tab('parent', 'きろく') + tab('inbox', 'フィードバック') + tab('changes', '改善の記録')
-    : PAGE === 'child' ? tab('home', 'れんしゅう') + tab('mine', 'じぶんの記録')
+    : PAGE === 'child' || PAGE === 'trial' ? tab('home', 'れんしゅう') + tab('mine', 'じぶんの記録')
       : tab('home', 'れんしゅう') + tab('mine', 'じぶんの記録') + tab('parent', 'きろく (保護者)') + tab('inbox', 'フィードバック') + tab('changes', '改善の記録');
-  return `<header class="top"><div class="brand"><span class="sq" aria-hidden="true"></span>${PAGE === 'parent' ? '練習帳 保護者ページ' : '計算と単位の練習帳'}</div><nav class="tabs" aria-label="画面">${tabs}</nav></header>`;
+  return `<header class="top"><div class="brand"><span class="sq" aria-hidden="true"></span>${PAGE === 'parent' ? '練習帳 保護者ページ' : PAGE === 'trial' ? '練習帳 お試し (保護者用)' : '計算と単位の練習帳'}</div><nav class="tabs" aria-label="画面">${tabs}</nav></header>${PAGE === 'trial' ? `<div class="trialbar" role="note"><b>お試しページ</b> ここで解いた記録は 娘さんのページとは別に保存され、娘さんの記録・メダル・ランクには入りません。押した「わかった/わからない」などは 保護者ページに「お試し」として出ます。${confirmTrialReset ? '<button class="btn btn-danger sm" data-act="trialreset-yes">お試しの記録をけす</button><button class="btn btn-line sm" data-act="trialreset-no">やめる</button>' : '<button class="btn btn-line sm" data-act="trialreset">お試しの記録をけす</button>'}</div>` : ''}`;
 }
+let confirmTrialReset = false;
 function footer() {
+  if (PAGE === 'trial') return `<footer class="foot"><span>${APP_VERSION} お試し</span><a href="parent.html">保護者ページへ</a></footer>`;
   if (PAGE === 'child') return `<footer class="foot"><span>${APP_VERSION}</span><a href="parent.html">保護者ページ</a></footer>`;
-  if (PAGE === 'parent') return `<footer class="foot"><span>${APP_VERSION}</span><a href="index.html">娘さんのページ (練習) を開く</a></footer>`;
+  if (PAGE === 'parent') return `<footer class="foot"><span>${APP_VERSION}</span><span><a href="trial.html">お試しページ (保護者が解いてみる)</a> ・ <a href="index.html">娘さんのページ</a></span></footer>`;
   return `<footer class="foot"><span>${APP_VERSION}</span></footer>`;
 }
 function dotsHTML(arr, total = 10) {
@@ -590,10 +594,13 @@ function mergeStates(list) {
   return out;
 }
 function parentSources() {
-  const local = (() => { try { return migrate(JSON.parse(localStorage.getItem(LS_KEY))); } catch (e) { return null; } })();
+  const local = (() => { try { return migrate(JSON.parse(localStorage.getItem(CHILD_KEY))); } catch (e) { return null; } })();
   const hasLocal = local && ((local.sessions || []).length || (local.feedback || []).length);
   return { local: hasLocal ? local : null, imports: Object.values(pstore.imports) };
 }
+// お試しページで押した声 (記録・点数はまぜない)
+function trialFeedback() { try { const t = JSON.parse(localStorage.getItem(TRIAL_KEY)); return ((t && t.feedback) || []).map((f) => Object.assign({}, f, { trial: true })); } catch (e) { return []; } }
+function parentState() { const st = mergeStates([parentSources().local, ...Object.values(pstore.imports)]); st.feedback = [...(st.feedback || []), ...trialFeedback()].sort((a, b) => a.at - b.at); return st; }
 function importFile(file) {
   const rd = new FileReader();
   rd.onload = () => {
@@ -601,7 +608,7 @@ function importFile(file) {
       const d = JSON.parse(rd.result);
       if (!d || d.kind !== 'keisan-kiroku' || !Array.isArray(d.sessions)) throw new Error('kind');
       pstore.imports[d.deviceId || 'import'] = d; saveParentStore();
-      state = mergeStates([parentSources().local, ...Object.values(pstore.imports)]);
+      state = parentState();
       importMsg = `読みこみました (${fmtDate(d.exportedAt)} の記録、練習 ${d.sessions.length}回・声 ${(d.feedback || []).length}件)`;
     } catch (e) { importMsg = 'このファイルは読みこめませんでした。「記録を おくる」で作ったファイルを えらんでください。'; }
     render();
@@ -618,9 +625,9 @@ function insights(st) {
   Object.entries(ts).forEach(([t, s]) => { if (s.n >= 5 && s.hint / s.n >= 0.4) out.push({ k: 'hint', s: `先に しくみを見ることが多い: ${TYPE_NAMES[t] || t} ${Math.round(s.hint / s.n * 100)}%` }); });
   const ms = {}; (st.sessions || []).forEach((x) => x.items.forEach((i) => { if (i.ok) (ms[i.type] = ms[i.type] || []).push(i.ms); }));
   Object.entries(ms).forEach(([t, a]) => { if (a.length >= 5) { const avg = a.reduce((x, y) => x + y, 0) / a.length; if (avg > 60000) out.push({ k: 'slow', s: `時間がかかる: ${TYPE_NAMES[t] || t} 正解までの平均 ${fmtSec(avg)}` }); } });
-  const ng = {}; (st.feedback || []).filter((f) => f.kind === 'frame' && f.verdict === 'ng').forEach((f) => { const k = f.ctx.lesson ? `読みもの「${(LESSONS[f.ctx.lesson] || {}).title}」${f.ctx.frame}枚目` : `${TYPE_NAMES[f.ctx.type] || f.ctx.type} の しくみ ${f.ctx.frame}枚目`; ng[k] = (ng[k] || 0) + 1; });
+  const ng = {}; (st.feedback || []).filter((f) => !f.trial && f.kind === 'frame' && f.verdict === 'ng').forEach((f) => { const k = f.ctx.lesson ? `読みもの「${(LESSONS[f.ctx.lesson] || {}).title}」${f.ctx.frame}枚目` : `${TYPE_NAMES[f.ctx.type] || f.ctx.type} の しくみ ${f.ctx.frame}枚目`; ng[k] = (ng[k] || 0) + 1; });
   Object.entries(ng).sort((a, b) => b[1] - a[1]).forEach(([k, n]) => out.push({ k: 'ng', s: `「わからない」が押された説明: ${k} (${n}回)` }));
-  const tough = {}; (st.feedback || []).filter((f) => f.kind === 'session' && f.verdict === 'tough').forEach((f) => { const k = sessLabel(f.ctx.mode, f.ctx.lv); tough[k] = (tough[k] || 0) + 1; });
+  const tough = {}; (st.feedback || []).filter((f) => !f.trial && f.kind === 'session' && f.verdict === 'tough').forEach((f) => { const k = sessLabel(f.ctx.mode, f.ctx.lv); tough[k] = (tough[k] || 0) + 1; });
   Object.entries(tough).forEach(([k, n]) => out.push({ k: 'tough', s: `「むずかしい」と答えた練習: ${k} (${n}回)` }));
   return out;
 }
@@ -628,7 +635,7 @@ function fbLine(f) {
   const tag = f.kind === 'frame' ? `説明: ${FB_LABEL[f.verdict]}` : f.kind === 'problem' ? `問題へん？: ${FB_LABEL[f.verdict]}` : f.kind === 'session' ? `感想: ${FB_LABEL[f.verdict]}` : f.kind === 'comment' ? 'ひとこと' : 'アイデア';
   const c = f.ctx || {};
   const where = f.kind === 'session' || f.kind === 'comment' ? `${sessLabel(c.mode, c.lv)}${c.n ? ` ${c.c}/${c.n}正解` : ''}` : fbCtxText(c);
-  return { tag, where, q: c.q, extra: f.kind === 'frame' ? c.frameText : f.kind === 'problem' ? `答え ${c.answer || ''}${c.given ? ` / 入力 ${c.given}` : ''}` : '', text: f.text };
+  return { tag: (f.trial ? '[お試し] ' : '') + tag, where, q: c.q, extra: f.kind === 'frame' ? c.frameText : f.kind === 'problem' ? `答え ${c.answer || ''}${c.given ? ` / 入力 ${c.given}` : ''}` : '', text: f.text };
 }
 function buildReport() {
   const st = state; const d = new Date(); const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
@@ -638,8 +645,11 @@ function buildReport() {
   const notes = pstore.notes.filter((n) => !pstore.sent[n.id]);
   let t = `# 練習帳フィードバック ${id}\n作成: ${d.toLocaleString('ja-JP')} / アプリ ${APP_VERSION}\n\n## 保護者のメモ (${notes.length})\n`;
   t += notes.length ? notes.map((n, i) => `- [N${i + 1}][${n.cat}] ${n.text}`).join('\n') : '- なし';
-  t += `\n\n## 娘さんの声 (${fbs.length})\n`;
-  t += fbs.length ? fbs.map((f, i) => { const l = fbLine(f); return `- [F${i + 1}][${l.tag}]${l.where ? ' ' + l.where : ''}${l.q ? ` 問題「${l.q}」` : ''}${l.extra ? ` (${l.extra})` : ''}${l.text ? ` 「${l.text}」` : ''}`; }).join('\n') : '- なし';
+  const tri = fbs.filter((f) => f.trial);
+  if (tri.length) t += `\n\n## 保護者がお試しページで押した声 (${tri.length})\n` + tri.map((f, i) => { const l = fbLine(f); return `- [T${i + 1}][${l.tag.replace('[お試し] ', '')}]${l.where ? ' ' + l.where : ''}${l.q ? ` 問題「${l.q}」` : ''}${l.extra ? ` (${l.extra})` : ''}${l.text ? ` 「${l.text}」` : ''}`; }).join('\n');
+  const kid = fbs.filter((f) => !f.trial);
+  t += `\n\n## 娘さんの声 (${kid.length})\n`;
+  t += kid.length ? kid.map((f, i) => { const l = fbLine(f); return `- [F${i + 1}][${l.tag}]${l.where ? ' ' + l.where : ''}${l.q ? ` 問題「${l.q}」` : ''}${l.extra ? ` (${l.extra})` : ''}${l.text ? ` 「${l.text}」` : ''}`; }).join('\n') : '- なし';
   if (oks.length) t += `\n- (「わかった」${oks.length}件: ${[...new Set(oks.map((f) => fbCtxText(f.ctx)))].slice(0, 8).join('、')})`;
   const ins = insights(st);
   t += `\n\n## 記録から自動で見つけたこと\n${ins.length ? ins.map((x) => `- ${x.s}`).join('\n') : '- とくになし'}`;
@@ -652,13 +662,13 @@ function buildReport() {
 function inboxHTML() {
   const src = parentSources(); const st = state;
   let h = '<section class="parent">';
-  h += `<div><h1 style="font-size:1.6rem">フィードバック</h1><p class="note">娘さんがアプリで押した声と、保護者のメモを まとめて Claude に送ります。</p></div>`;
+  h += `<div><h1 style="font-size:1.6rem">フィードバック</h1><p class="note">娘さんがアプリで押した声 (お試しページで押した声も) と、保護者のメモを まとめて Claude に送ります。</p></div>`;
   h += figFlow([{ s: '① 娘さん', sub: 'わかった・わからない\nひとこと・アイデア' }, { s: '② 記録を わたす', sub: '同じ端末なら そのまま\nちがう端末は ファイル', cls: 'sh3' }, { s: '③ Claude に送る', sub: 'まとめを スレッドへ\nはりつけ', cls: 'sh2' }, { s: '④ 改善・公開', sub: '「改善の記録」に\nのる' }], { h: 84, W: 860, label: 'フィードバックの流れ' });
   h += `<div class="sec"><h2>記録の読みこみ</h2><p class="note">見ている記録: ${src.local ? 'この端末の記録' : ''}${src.local && src.imports.length ? ' + ' : ''}${src.imports.map((d) => `ファイル (${fmtDate(d.exportedAt)})`).join('、')}${!src.local && !src.imports.length ? 'まだありません。娘さんの「じぶんの記録 → 記録を おくる」で作ったファイルを読みこんでください。' : ''}</p><div class="fb-actions"><label class="btn btn-line sm filebtn">記録ファイルを読みこむ<input type="file" accept="application/json,.json" data-act="import" hidden></label>${importMsg ? `<span class="pill on" role="status">${esc(importMsg)}</span>` : ''}</div></div>`;
   const ins = insights(st);
   h += `<div class="sec"><h2>記録から自動で見つけたこと</h2>${ins.length ? `<ul class="ins">${ins.map((x) => `<li class="${x.k}">${esc(x.s)}</li>`).join('')}</ul>` : '<p class="note">今のところ、とくにありません (5問以上の記録から見つけます)。</p>'}</div>`;
   const fbs = (st.feedback || []).slice().reverse();
-  h += `<div class="sec"><h2>娘さんの声 (${fbs.length})</h2>`;
+  h += `<div class="sec"><h2>アプリで押された声 (${fbs.length})</h2>${fbs.some((f) => f.trial) ? '<p class="note">「[お試し]」は 保護者がお試しページで押したものです。</p>' : ''}`;
   if (!fbs.length) h += '<p class="note">まだありません。説明の下の「わかった / わからない」、答えたあとの「この問題について おしえて」、結果画面の感想、じぶんの記録の「おねがい・アイデア」から届きます。</p>';
   else h += '<div class="list">' + fbs.slice(0, 60).map((f) => { const l = fbLine(f); return `<div class="li"><span class="m ${f.verdict === 'ng' || f.kind === 'problem' || f.verdict === 'tough' ? 'ng' : 'ok'}">${f.verdict === 'ok' || f.verdict === 'fit' || f.verdict === 'easy' ? '○' : '!'}</span><span class="qq"><b>${esc(l.tag)}</b> ${esc(l.where)}${l.q ? `<br><small>問題: ${esc(l.q)}</small>` : ''}${l.extra ? `<br><small>${esc(l.extra)}</small>` : ''}${l.text ? `<br>「${esc(l.text)}」` : ''}</span><span class="aa"><small>${fmtDate(f.at)}</small></span><span class="tt">${pstore.sent[f.id] ? `<span class="pill">送信済み ${pstore.sent[f.id]}</span>` : '<span class="pill hot">未送信</span>'}</span></div>`; }).join('') + '</div>';
   h += '</div>';
@@ -813,12 +823,15 @@ document.addEventListener('click', (e) => {
   else if (a === 'sharereport') { if (navigator.share) navigator.share({ title: report.id, text: report.text }).then(() => { report.msg = '共有しました。送ったら「送信済み」にしてください'; render(); }, () => {}); else { report.msg = 'この端末では共有が使えません。コピーしてください'; render(); } }
   else if (a === 'copyreport') { const ok = () => { report.msg = 'コピーしました。スレッドに はりつけてください'; render(); }; const manual = () => { report.msg = '下の文を選んでコピーしてください'; render(); const t = document.getElementById('report-box'); if (t) { t.focus(); t.select(); } }; try { navigator.clipboard.writeText(report.text).then(ok, manual); } catch (err) { manual(); } }
   else if (a === 'marksent') { report.fbIds.forEach((id) => { pstore.sent[id] = report.id; }); report.noteIds.forEach((id) => { pstore.sent[id] = report.id; }); pstore.batches.push({ id: report.id, at: Date.now(), count: report.count }); saveParentStore(); report = null; noteMsg = ''; render(); }
+  else if (a === 'trialreset') { confirmTrialReset = true; render(); }
+  else if (a === 'trialreset-no') { confirmTrialReset = false; render(); }
+  else if (a === 'trialreset-yes') { if (PAGE === 'trial') { const dev = state.deviceId; state = freshState(); state.deviceId = dev; saveLocal(); sess = null; view = 'home'; } confirmTrialReset = false; render(); }
   else if (a === 'reset') { confirmReset = true; render(); }
   else if (a === 'reset-no') { confirmReset = false; render(); }
   else if (a === 'reset-yes') {
     if (PAGE === 'parent') { // この端末の記録だけをリセットし、読みこんだファイルはそのまま
-      const local = parentSources().local; if (local) { const f = freshState(); f.sessions = local.sessions || []; f.feedback = local.feedback || []; f.deviceId = local.deviceId; f.xp = local.xp; f.updatedAt = Date.now(); try { localStorage.setItem(LS_KEY, JSON.stringify(f)); } catch (e) { /* 保存できない */ } }
-      state = mergeStates([parentSources().local, ...Object.values(pstore.imports)]); confirmReset = false; render(); return;
+      const local = parentSources().local; if (local) { const f = freshState(); f.sessions = local.sessions || []; f.feedback = local.feedback || []; f.deviceId = local.deviceId; f.xp = local.xp; f.updatedAt = Date.now(); try { localStorage.setItem(CHILD_KEY, JSON.stringify(f)); } catch (e) { /* 保存できない */ } }
+      state = parentState(); confirmReset = false; render(); return;
     }
     const keep = state.sessions; const fb = state.feedback; const f = state.finger; const dev = state.deviceId; const xp = state.xp; state = freshState(); state.sessions = keep; state.feedback = fb; state.finger = f; state.deviceId = dev; state.xp = xp; state.updatedAt = Date.now(); saveLocal(); saveRemote(); confirmReset = false; render(); }
 });
@@ -839,6 +852,6 @@ document.addEventListener('visibilitychange', () => {
   else if (sess.hiddenAt) { sess.t0 += Date.now() - sess.hiddenAt; sess.hiddenAt = null; }
 });
 document.addEventListener('change', (e) => { const t = e.target; if (t && t.dataset && t.dataset.act === 'import' && t.files && t.files[0]) importFile(t.files[0]); });
-if (PAGE === 'parent') state = mergeStates([parentSources().local, ...Object.values(pstore.imports)]);
+if (PAGE === 'parent') state = parentState();
 render();
-if (PAGE !== 'parent') initDb();
+if (PAGE === 'child' || PAGE === 'all') initDb();
