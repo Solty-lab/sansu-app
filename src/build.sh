@@ -16,9 +16,9 @@ page() { # $1 = PAGE, $2 = タイトル
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="$2">
-<link rel="apple-touch-icon" href="icons/$1-180.png">
-<link rel="icon" type="image/png" sizes="32x32" href="icons/$1-32.png">
-<link rel="icon" type="image/png" sizes="192x192" href="icons/$1-192.png">
+<link rel="apple-touch-icon" href="icons/bot-180.png">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/bot-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/bot-192.png">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
 H
   cat src/head.html; printf '</head>\n<body>\n'; body "$1"; printf '</body>\n</html>\n'

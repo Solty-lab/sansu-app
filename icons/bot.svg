@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFD84A"/><stop offset="1" stop-color="#FFA41B"/></linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <!-- アンテナ (＋) -->
+  <rect x="246" y="84" width="20" height="60" rx="10" fill="#2B3A55"/>
+  <circle cx="256" cy="78" r="38" fill="#9B5CFF"/>
+  <path d="M256 60v36M238 78h36" stroke="#fff" stroke-width="12" stroke-linecap="round"/>
+  <!-- 耳 -->
+  <rect x="62" y="236" width="52" height="104" rx="22" fill="#2EA8FF"/>
+  <rect x="398" y="236" width="52" height="104" rx="22" fill="#2EA8FF"/>
+  <path d="M76 274l24 24M100 274l-24 24" stroke="#fff" stroke-width="10" stroke-linecap="round"/>
+  <path d="M410 288h28" stroke="#fff" stroke-width="10" stroke-linecap="round"/><circle cx="424" cy="272" r="6" fill="#fff"/><circle cx="424" cy="304" r="6" fill="#fff"/>
+  <!-- 頭 -->
+  <rect x="96" y="136" width="320" height="300" rx="80" fill="#fff"/>
+  <!-- 顔の画面 -->
+  <rect x="134" y="182" width="244" height="190" rx="52" fill="#2B3A55"/>
+  <!-- 目 -->
+  <circle cx="204" cy="256" r="30" fill="#5CE1FF"/>
+  <circle cx="308" cy="256" r="30" fill="#5CE1FF"/>
+  <circle cx="214" cy="246" r="10" fill="#fff"/>
+  <circle cx="318" cy="246" r="10" fill="#fff"/>
+  <!-- 口 (＝ のにっこり) -->
+  <path d="M214 322 Q256 352 298 322" stroke="#5CE1FF" stroke-width="14" fill="none" stroke-linecap="round"/>
+</svg>

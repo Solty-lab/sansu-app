@@ -6,9 +6,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="保護者ページ">
-<link rel="apple-touch-icon" href="icons/parent-180.png">
-<link rel="icon" type="image/png" sizes="32x32" href="icons/parent-32.png">
-<link rel="icon" type="image/png" sizes="192x192" href="icons/parent-192.png">
+<link rel="apple-touch-icon" href="icons/bot-180.png">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/bot-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/bot-192.png">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
 <title>練習帳 保護者ページ</title>
 <meta name="claude:viewport-fit-sides" content="cover">
@@ -2345,9 +2345,9 @@ function makeProblem(type, level) {
 if (typeof module !== 'undefined') module.exports = { Fr, GEN, makeProblem, LESSONS, STAGES, TRACKS, LEVEL_RAMP, levelTypes, judgeSlot, parseAnswer, addSubFrames, mulFrames, divFrames, exprSteps, gridHTML, setRnd: (f) => { rnd = f; } };
 // 改善の記録 (新しい順)。from には きっかけ (保護者の指示・送られたまとめの番号 FB-…) を書く
 const CHANGELOG = [
-  { v: '1.8.4', date: '2026-11-08', title: 'アプリのアイコン', from: ['保護者の指示 (11/8)'], items: [
-    '娘さん用: 黄色の地に ＋ − × ÷ のカラフルなタイルと星のアイコン',
-    '保護者用: 緑の地に 記録ボードと のびる線のアイコン。ホーム画面の名前は「保護者ページ」',
+  { v: '1.8.4', date: '2026-11-08', title: 'アプリのアイコン (算数ロボット)', from: ['保護者の指示 (11/8)'], items: [
+    '娘さん用・保護者用で共通の 算数ロボットのアイコン (アンテナに ＋、耳に × と ÷)',
+    '保護者ページのホーム画面の名前は「保護者ページ」',
   ] },
   { v: '1.8.3', date: '2026-11-08', title: '声を自動で集める', from: ['保護者の指示 (11/8)'], items: [
     '押された声と保護者のメモを、保護者の Google スプレッドシートへ自動で送る',
