@@ -21,6 +21,7 @@ H
   cat src/head.html; printf '</head>\n<body>\n'; body "$1"; printf '</body>\n</html>\n'
 }
 page child '練習帳' > index.html
-page trial '練習帳 お試し' | sed 's|<title>計算と単位の練習帳</title>|<title>練習帳 お試し (保護者用)</title>|' > trial.html
+# お試しは 保護者ページの「お試し」タブにまとめた (v1.8.2)。以前のリンク用に転送だけ残す
+printf '<!doctype html><meta charset="utf-8"><title>練習帳 保護者ページ</title><meta http-equiv="refresh" content="0; url=parent.html#trial"><p><a href="parent.html#trial">保護者ページの「お試し」へ</a></p>\n' > trial.html
 page parent '練習帳 保護者' | sed 's|<title>計算と単位の練習帳</title>|<title>練習帳 保護者ページ</title>|' > parent.html
 { cat src/head.html; body all; } > dist/keisan-tani.html

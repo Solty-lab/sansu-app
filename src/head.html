@@ -57,6 +57,7 @@ h1, h2, h3 { font-family: var(--f-display); text-wrap: balance; margin: 0; line-
 .tabs { display: flex; gap: 4px; background: var(--sheet); border: 1px solid var(--rule); border-radius: 999px; padding: 4px; }
 .tabs button { border: 0; background: transparent; padding: 8px 16px; border-radius: 999px; font-size: .95rem; }
 .tabs button[aria-pressed="true"] { background: var(--board); color: var(--board-ink); }
+@media (max-width: 640px) { .tabs { flex-wrap: wrap; border-radius: 18px; } .tabs button { padding: 6px 10px; white-space: nowrap; font-size: .9rem; } }
 
 /* 方眼の地 */
 .grid-bg {

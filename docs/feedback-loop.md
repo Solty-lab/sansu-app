@@ -2,7 +2,7 @@
 
 ## ページ
 - 娘さん用: `index.html` (練習・じぶんの記録)。フッターに保護者ページへの小さなリンク。
-- お試し用: `trial.html` (保護者が全機能を試す。記録は `keisan-tani-trial` に別保存。押した声は保護者ページとまとめに「[お試し]/[T番号]」で出る。`insights` には入れない)。
+- お試し: `parent.html` の「お試し」「お試しの記録」タブ (保護者が全機能を試す。記録は `keisan-tani-trial` に別保存。押した声はフィードバックとまとめに「[お試し]/[T番号]」で出る。`insights` には入れない)。`trial.html` は `parent.html#trial` への転送だけ。
 - 保護者用: `parent.html` (きろく・フィードバック・改善の記録)。記録は読むだけ (リセットのときだけ書く)。
 - 確認用 artifact: `dist/keisan-tani.html` (両方入り)。
 - `sh src/build.sh` で3つを作る。`PAGE` 定数 ('child' | 'parent' | 'all') で画面が切りかわる。
