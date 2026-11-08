@@ -2342,6 +2342,10 @@ function makeProblem(type, level) {
 if (typeof module !== 'undefined') module.exports = { Fr, GEN, makeProblem, LESSONS, STAGES, TRACKS, LEVEL_RAMP, levelTypes, judgeSlot, parseAnswer, addSubFrames, mulFrames, divFrames, exprSteps, gridHTML, setRnd: (f) => { rnd = f; } };
 // 改善の記録 (新しい順)。from には きっかけ (保護者の指示・送られたまとめの番号 FB-…) を書く
 const CHANGELOG = [
+  { v: '1.8.3', date: '2026-11-08', title: '声を自動で集める準備', from: ['保護者の指示 (11/8)'], items: [
+    '押された声と保護者のメモを、保護者の Google スプレッドシートへ自動で送る仕組み (送り先の設定後に有効)',
+    '送れなかった分は端末にためて、あとで送り直す',
+  ] },
   { v: '1.8.2', date: '2026-11-08', title: 'お試しを保護者ページにまとめた', from: ['保護者の指示 (11/8)'], items: [
     '保護者ページに「お試し」「お試しの記録」タブを追加。保護者ページ1つで 記録・フィードバック・改善の記録・お試しが使える',
     'お試しの記録は これまでどおり娘さんの記録と別に保存 (以前のお試しの記録も そのまま使える)',
@@ -2895,7 +2899,33 @@ function addFeedback(kind, verdict, ctx = {}, text = '') {
   const fb = { id: 'f' + Date.now().toString(36) + Math.floor(rnd() * 1296).toString(36), at: Date.now(), kind, verdict, text: text || undefined, ctx };
   state.feedback.push(fb); state.feedback = state.feedback.slice(-300);
   state.updatedAt = Date.now(); saveLocal();
+  if (allowWrite && !(kind === 'frame' && verdict === 'ok')) { const l = fbLine(fb); enqueueCollect({ id: fb.id, at: fb.at, page: trialMode ? 'お試し' : '娘さん', kind: l.tag, verdict: verdict || '', text: text || '', where: [l.where, l.q && `問題「${l.q}」`, l.extra].filter(Boolean).join(' / ') }); }
   return fb;
+}
+// ===== 声を 保護者の Google スプレッドシートへ 自動で送る (COLLECT_URL が空なら 送らない) =====
+// 送れなかった分は この端末にためておき、次に開いたとき・オンラインにもどったときに送りなおす
+const COLLECT_URL = '';
+const OUTBOX_KEY = 'keisan-outbox';
+function loadOutbox() { try { return JSON.parse(localStorage.getItem(OUTBOX_KEY)) || []; } catch (e) { return []; } }
+function enqueueCollect(item) {
+  if (!COLLECT_URL || PAGE === 'all') return;
+  try { const q = loadOutbox(); q.push(item); localStorage.setItem(OUTBOX_KEY, JSON.stringify(q.slice(-500))); } catch (e) { /* 保存できない */ }
+  flushCollect();
+}
+let collectBusy = false;
+async function flushCollect() {
+  if (!COLLECT_URL || PAGE === 'all' || collectBusy || (typeof navigator !== 'undefined' && navigator.onLine === false)) return;
+  const q = loadOutbox(); if (!q.length) return;
+  collectBusy = true;
+  const items = q.slice(0, 50);
+  try {
+    // Google のウェブアプリは 返事を読めない形 (no-cors) で送る。同じ id は シート側で2回書かない
+    await fetch(COLLECT_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ app: 'keisan-tani', device: PAGE + ':' + ((parentSources && parentSources().local && parentSources().local.deviceId) || ''), items }) });
+    const sent = new Set(items.map((x) => x.id));
+    try { localStorage.setItem(OUTBOX_KEY, JSON.stringify(loadOutbox().filter((x) => !sent.has(x.id)))); } catch (e) { /* 保存できない */ }
+  } catch (e) { /* 通信できない: 次の機会に */ }
+  collectBusy = false;
+  if (loadOutbox().length && items.length === 50) flushCollect();
 }
 function frameCtx() {
   const p = sess.problem; const fs = frames(); const f = fs[sess.frame];
@@ -3190,7 +3220,7 @@ document.addEventListener('click', (e) => {
   else if (a === 'comment') { const t = (document.getElementById('fb-text') || {}).value || ''; if (t.trim()) { const s2 = sess.saved || {}; addFeedback('comment', sess.rating || '', { mode: sess.mode, lv: sess.fixedLv || undefined, c: s2.c, n: s2.n, sessionId: s2.id }, t.trim()); sess.commentSent = true; render(); } }
   else if (a === 'idea') { const t = (document.getElementById('idea-text') || {}).value || ''; if (t.trim()) { addFeedback('idea', '', {}, t.trim()); ideaSent = true; render(); } }
   else if (a === 'sendfile') { shareRecord(); }
-  else if (a === 'note') { const t = (document.getElementById('note-text') || {}).value || ''; const cat = (document.getElementById('note-cat') || {}).value || 'その他'; if (t.trim()) { pstore.notes.push({ id: 'n' + Date.now().toString(36), at: Date.now(), cat, text: t.trim() }); saveParentStore(); noteMsg = 'メモに追加しました。'; render(); } }
+  else if (a === 'note') { const t = (document.getElementById('note-text') || {}).value || ''; const cat = (document.getElementById('note-cat') || {}).value || 'その他'; if (t.trim()) { const note = { id: 'n' + Date.now().toString(36), at: Date.now(), cat, text: t.trim() }; pstore.notes.push(note); saveParentStore(); enqueueCollect({ id: note.id, at: note.at, page: '保護者', kind: 'メモ', verdict: cat, text: note.text, where: '' }); noteMsg = 'メモに追加しました。'; render(); } }
   else if (a === 'delnote') { pstore.notes = pstore.notes.filter((n) => n.id !== v); saveParentStore(); render(); }
   else if (a === 'withdata') { withData = b.checked; report = null; }
   else if (a === 'mkreport') { report = buildReport(); render(); const t = document.getElementById('report-box'); if (t) t.scrollIntoView({ block: 'center' }); }
@@ -3225,6 +3255,8 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) sess.hiddenAt = Date.now();
   else if (sess.hiddenAt) { sess.t0 += Date.now() - sess.hiddenAt; sess.hiddenAt = null; }
 });
+window.addEventListener('online', () => flushCollect());
+document.addEventListener('visibilitychange', () => { if (!document.hidden) flushCollect(); });
 document.addEventListener('change', (e) => { const t = e.target; if (t && t.dataset && t.dataset.act === 'import' && t.files && t.files[0]) importFile(t.files[0]); });
 // 保護者ページ: 「お試し」タブでは お試しの記録に切りかえて書きこむ。ほかのタブでは 娘さんの記録を読むだけ
 function setTrial(on) {
@@ -3235,6 +3267,7 @@ function setTrial(on) {
 if (PAGE === 'parent') { state = parentState(); if (location.hash === '#trial') { setTrial(true); view = 'home'; } }
 render();
 if (PAGE === 'child' || PAGE === 'all') initDb();
+flushCollect();
 </script>
 </body>
 </html>
