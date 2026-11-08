@@ -527,7 +527,7 @@ function addFeedback(kind, verdict, ctx = {}, text = '') {
 }
 // ===== 声を 保護者の Google スプレッドシートへ 自動で送る (COLLECT_URL が空なら 送らない) =====
 // 送れなかった分は この端末にためておき、次に開いたとき・オンラインにもどったときに送りなおす
-const COLLECT_URL = '';
+const COLLECT_URL = 'https://script.google.com/macros/s/AKfycbxacgFHS77TjW1yGoy3dqVpHocdlEBFeBMDNcsYc9T1-pdJam5yiMWn8efgH3VhcyCHuw/exec';
 const OUTBOX_KEY = 'keisan-outbox';
 function loadOutbox() { try { return JSON.parse(localStorage.getItem(OUTBOX_KEY)) || []; } catch (e) { return []; } }
 function enqueueCollect(item) {

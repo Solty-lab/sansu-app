@@ -2342,8 +2342,8 @@ function makeProblem(type, level) {
 if (typeof module !== 'undefined') module.exports = { Fr, GEN, makeProblem, LESSONS, STAGES, TRACKS, LEVEL_RAMP, levelTypes, judgeSlot, parseAnswer, addSubFrames, mulFrames, divFrames, exprSteps, gridHTML, setRnd: (f) => { rnd = f; } };
 // 改善の記録 (新しい順)。from には きっかけ (保護者の指示・送られたまとめの番号 FB-…) を書く
 const CHANGELOG = [
-  { v: '1.8.3', date: '2026-11-08', title: '声を自動で集める準備', from: ['保護者の指示 (11/8)'], items: [
-    '押された声と保護者のメモを、保護者の Google スプレッドシートへ自動で送る仕組み (送り先の設定後に有効)',
+  { v: '1.8.3', date: '2026-11-08', title: '声を自動で集める', from: ['保護者の指示 (11/8)'], items: [
+    '押された声と保護者のメモを、保護者の Google スプレッドシートへ自動で送る',
     '送れなかった分は端末にためて、あとで送り直す',
   ] },
   { v: '1.8.2', date: '2026-11-08', title: 'お試しを保護者ページにまとめた', from: ['保護者の指示 (11/8)'], items: [
@@ -2904,7 +2904,7 @@ function addFeedback(kind, verdict, ctx = {}, text = '') {
 }
 // ===== 声を 保護者の Google スプレッドシートへ 自動で送る (COLLECT_URL が空なら 送らない) =====
 // 送れなかった分は この端末にためておき、次に開いたとき・オンラインにもどったときに送りなおす
-const COLLECT_URL = '';
+const COLLECT_URL = 'https://script.google.com/macros/s/AKfycbxacgFHS77TjW1yGoy3dqVpHocdlEBFeBMDNcsYc9T1-pdJam5yiMWn8efgH3VhcyCHuw/exec';
 const OUTBOX_KEY = 'keisan-outbox';
 function loadOutbox() { try { return JSON.parse(localStorage.getItem(OUTBOX_KEY)) || []; } catch (e) { return []; } }
 function enqueueCollect(item) {
