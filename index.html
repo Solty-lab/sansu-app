@@ -991,10 +991,11 @@ const STAGES = {
   C1: { track: 'C', name: 'お金の計算 (おつり・消費税・割引き)', types: ['m_change', 'm_tax', 'm_discount'] },
   C2: { track: 'C', name: 'ねだんの決まり方 (仕入れ・お得)', types: ['m_cost', 'm_value'] },
   C3: { track: 'C', name: '通貨と利息 (為替・ためる)', types: ['m_fx', 'm_interest'] },
+  C4: { track: 'C', name: '税金のしくみ (使い道・1人あたり・所得税)', types: ['t_share', 't_per', 't_income', 't_year'] },
 };
 for (const st of Object.values(STAGES)) if (st.levels) st.types = [...new Set(Object.values(st.levels).flatMap((l) => l.types))];
 const LEVEL_RAMP = [1, 1, 2, 2, 3, 3, 4, 4, 5, 5]; // 10問の何問目がどのレベルか
-const TRACKS = { A: { name: '計算のしくみ', stages: ['A1', 'A2', 'A3', 'A4'] }, B: { name: '単位と速さ', stages: ['B1', 'B2', 'B3', 'B4', 'B5'] }, C: { name: 'お金とくらし', stages: ['C1', 'C2', 'C3'] } };
+const TRACKS = { A: { name: '計算のしくみ', stages: ['A1', 'A2', 'A3', 'A4'] }, B: { name: '単位と速さ', stages: ['B1', 'B2', 'B3', 'B4', 'B5'] }, C: { name: 'お金とくらし', stages: ['C1', 'C2', 'C3', 'C4'] } };
 const TYPE_NAMES = {
   int_add: '整数のたし算', int_sub: '整数のひき算', int_mul: '整数のかけ算', int_div: '整数のわり算', mental: '暗算のくふう',
   dec_add: '小数のたし算', dec_sub: '小数のひき算', dec_mul: '小数のかけ算', dec_div: '小数のわり算',
@@ -1003,7 +1004,7 @@ const TYPE_NAMES = {
   conv: '単位のかんさん', time_mix: '時間の組み合わせ', len_mix: '長さ・重さの組み合わせ', speed_conv: '速さの単位',
   speed: '速さの問題', per_unit: '1あたりを求める', per_total: '1あたりから求める', compare: 'くらべる',
   unit_of: '答えの単位', unit_check: '単位で式をたしかめる', density: '密度',
-  m_change: 'おつり', m_tax: '消費税', m_discount: '割引き', m_cost: 'ねだんの内わけ・仕入れ', m_value: 'お得をくらべる', m_fx: '為替 (円とドル)', m_interest: '利息',
+  m_change: 'おつり', m_tax: '消費税', m_discount: '割引き', m_cost: 'ねだんの内わけ・仕入れ', m_value: 'お得をくらべる', m_fx: '為替 (円とドル)', m_interest: '利息', t_share: '税金の使い道 (割合)', t_per: '1人あたりの税金', t_income: '所得税の計算', t_year: '1年の消費税',
 };
 const stageOfType = (t) => Object.keys(STAGES).find((s) => STAGES[s].types.includes(t));
 // あるステップ・レベルで出せる種類
@@ -2201,6 +2202,72 @@ GEN.m_interest = () => {
         text: `1年後: ${P.toLocaleString('ja-JP')} × ${1 + r2 / 100} = ${A1.toLocaleString('ja-JP')}円。<br>2年後は この ${A1.toLocaleString('ja-JP')}円 全体が もとになる: × ${1 + r2 / 100} = <b>${A2.toLocaleString('ja-JP')}円</b>。<br>2年目の利息 (${(A2 - A1).toLocaleString('ja-JP')}円) が 1年目 (${(A1 - P).toLocaleString('ja-JP')}円) より多いのは、利息にも利息がつくからです (複利)。<br><small>お金を かりるときも 同じしくみで、返すのがおくれるほど 利息がふえます。</small>`, lesson: 'savings' },
     ] };
 };
+// ----- 税金 (C4) -----
+// 所得税の段階 (2026年時点の国の所得税の表のはじめの2段。復興特別所得税などは入れない、かんたんにした計算)
+const TAX_BRACKETS = [{ upto: 195, r: 5 }, { upto: 330, r: 10 }];
+const man = (n) => `${n.toLocaleString('ja-JP')}万`;
+GEN.t_share = () => {
+  const B = pick([200, 300, 400, 500, 600, 800, 1000]);
+  const uses = [['教育 (学校など)', pick([10, 15, 20, 25])], ['福祉・医療', pick([25, 30, 35])], ['道路・公園', pick([10, 15])]];
+  const k = ri(0, uses.length - 1); const [what, r] = uses[k]; const part = B * r / 100;
+  const rest = 100 - uses.reduce((s, u) => s + u[1], 0);
+  const tape = (ask) => figTapes([{ s: '1年の予算', segs: [...uses.map(([a, p], i) => ({ w: p, s: i === k ? (ask === 'r' ? '□%' : `${p}%`) : p >= 15 ? a.split(' ')[0] : '', cls: i === k ? 'sh2' : 'sh' })), { w: rest, s: 'そのほか', cls: 'sh3' }], total: `${B}億円` }], { label: '予算の使い道のテープ図 (例)' });
+  const dl = (ask) => figDoubleLine({ top: '金額 (億円)', bot: '割合', cols: [{ pos: 0, t: '0', b: '0%' }, { pos: r, t: String(part), b: `${r}%`, ut: ask === 'part', ub: ask === 'r' }, { pos: 100, t: String(B), b: '100%' }], arrows: [], label: '金額と割合の二本の数直線' });
+  const note = '<small>ある市の予算の例です (数字は計算しやすくしたもの)。</small>';
+  if (rnd() < 0.6) return { html: `ある市の 1年の予算は ${B}億円。そのうち ${r}% を ${what} に使います。${what.split(' ')[0]} に使うお金は <b class="box">□</b> 億円`, text: `予算${B}億円の${r}% → □億円`, slots: [slot(part, '億円')],
+    explain: () => [
+      { fig: tape('part'), text: `予算 (100%) を、使い道ごとに 分けます。${what.split(' ')[0]} は そのうちの ${r}%。<br>${note}`, lesson: 'tax' },
+      { fig: dl('part'), text: `${r}% は 小数で ${r / 100}。もとにする量 × 割合 = くらべる量 なので、${B} × ${r / 100} = <b>${part}億円</b>` },
+    ] };
+  return { html: `ある市の 1年の予算は ${B}億円。そのうち ${part}億円 を ${what} に使います。これは 予算全体の <b class="box">□</b> %`, text: `${B}億円のうち${part}億円 → □%`, slots: [slot(r, '%')],
+    explain: () => [
+      { fig: tape('r'), text: `全体 ${B}億円 を 100% として、${part}億円 が 何% にあたるかを考えます。<br>${note}`, lesson: 'tax' },
+      { fig: dl('r'), text: `割合 = くらべる量 ÷ もとにする量 = ${part} ÷ ${B} = ${r / 100}。百分率にすると × 100 で <b>${r}%</b>` },
+    ] };
+};
+GEN.t_per = () => {
+  if (rnd() < 0.5) {
+    const [what, lo, hi] = pick([['市の図書館で 1年に買う本', 300, 900], ['市の スポーツ教室や 子ども会の手伝い (1年)', 200, 800], ['公園の 1年の手入れ', 300, 1200]]);
+    const P = pick([2, 3, 4, 5]); const per = ri(Math.ceil(lo / P / 10), Math.floor(hi / P / 10)) * 10; const T = per * P; // T 万円、P 万人、per 円/人
+    return { html: `${what} に ${man(T)}円 かかります。市の人 ${P}万人 で 分けると、1人あたり <b class="box">□</b> 円`, text: `${T}万円 ÷ ${P}万人 → 1人あたり□円`, slots: [slot(per, '円')],
+      explain: () => [
+        { fig: figTapes([{ s: 'かかるお金', segs: Array.from({ length: P }, (_, i) => ({ w: 1, s: '1万人分', cls: i === 0 ? 'sh2' : 'sh' })), total: `${man(T)}円` }], { label: '全体を人数で分けるテープ図' }),
+          text: `みんなの税金で はらうお金も、1人あたりに 直すと 身近になります。全体 ÷ 人数 = 1人あたり。<br>${P}万人 を「1万人の まとまり ${P}こ」と見ると、1万人分は ${man(T)}円 ÷ ${P} = <b>${man(per)}円</b>。`, lesson: 'tax' },
+        { fig: ueq([['単位の式', `${uqHTML(uq(T, '万円'))}${uop('÷')}${uqHTML(uq(P, '万人'))}${uop('=')}${uqHTML(uq(per, '円', 1, '人'))}`, 'all']], '万 と 万 は 消しあう'),
+          text: `1万人で ${man(per)}円 なら、1人では その 1万分の1 で <b>${per}円</b>。<br>「万円 ÷ 万人」は、上と下の 万 が 消しあって「円 ÷ 人」になります。<br><small>たしかめ: ${(T * 10000).toLocaleString('ja-JP')}円 ÷ ${(P * 10000).toLocaleString('ja-JP')}人 = ${per}円。数字は例です。</small>` },
+      ] };
+  }
+  let B, P; do { B = pick([300, 400, 600, 800, 900, 1200]); P = pick([10, 20, 30, 40]); } while (B % P);
+  const per = B / P; // 万円/人
+  return { html: `ある市の 1年の予算は ${B}億円、住んでいる人は ${P}万人 です。1人あたり <b class="box">□</b> 万円`, text: `${B}億円 ÷ ${P}万人 → 1人あたり□万円`, slots: [slot(per, '万円')],
+    explain: () => [
+      { fig: figTable(['', '数字で書くと', '0 の数'], [['1万', '10,000', '4こ'], ['1億', '100,000,000', '8こ'], ['1億 = 1万 × 1万', '', '4こ + 4こ']]),
+        text: `億 は 万の 1万倍 (1億 = 1万 × 1万) です。だから ${B}億円 = ${B}万 × 1万 円。<br><small>数字は計算しやすくした例です。</small>`, lesson: 'tax' },
+      { fig: ueq([['単位の式', `${uqHTML(uq(B, '億円'))}${uop('÷')}${uqHTML(uq(P, '万人'))}${uop('=')}${uqHTML(uq(per, '万円', 1, '人'))}`, 'all']], '億 ÷ 万 = 万'),
+        text: `(${B}万 × 1万)円 ÷ (${P} × 1万)人。上と下の「1万」が 消しあうので、${B}万円 ÷ ${P}人 = <b>${per}万円</b> (1人あたり)。<br>1人で ${per}万円 を はらうのは たいへんでも、みんなで出しあうと 学校や道路のような 大きな仕事ができます。` },
+    ] };
+};
+GEN.t_income = () => {
+  const X = ri(20, 33) * 10; // 課税される所得 (万円) 200〜330
+  const b1 = TAX_BRACKETS[0].upto; const t1 = b1 * 10000 * TAX_BRACKETS[0].r / 100; const t2 = (X - b1) * 10000 * TAX_BRACKETS[1].r / 100; const T = t1 + t2;
+  return { html: `所得税は、かせぎ (税金の計算に使う所得) のうち ${b1}万円 までの部分に ${TAX_BRACKETS[0].r}%、それをこえた部分に ${TAX_BRACKETS[1].r}% かかります。所得が ${X}万円 の人の 所得税は <b class="box">□</b> 円`, text: `所得${X}万円 (195万まで5%・こえた分10%) → 所得税□円`, slots: [slot(T, '円')],
+    explain: () => [
+      { fig: figTapes([{ s: `所得 ${X}万`, segs: [{ w: b1, s: `${b1}万まで → ${TAX_BRACKETS[0].r}%` }, { w: X - b1, s: `${X - b1}万 → ${TAX_BRACKETS[1].r}%`, cls: 'sh2' }] }], { label: '所得を段に分けるテープ図' }),
+        text: `所得税は、所得を 段に分けて、上の段ほど 高い割合をかけます (かせぎが多い人ほど 多くはらう しくみ)。<br>${X}万円 は、${b1}万円 までの部分 と、こえた ${X - b1}万円 に 分かれます。`, lesson: 'tax' },
+      { fig: figTable(['部分', '計算', '税金'], [[`${b1}万円 まで`, `${(b1 * 10000).toLocaleString('ja-JP')} × ${TAX_BRACKETS[0].r / 100}`, `${t1.toLocaleString('ja-JP')}円`], [`こえた ${X - b1}万円`, `${((X - b1) * 10000).toLocaleString('ja-JP')} × ${TAX_BRACKETS[1].r / 100}`, `${t2.toLocaleString('ja-JP')}円`], ['あわせて', '', `<b>${T.toLocaleString('ja-JP')}円</b>`]]),
+        text: `それぞれの部分に 割合をかけて たします: ${t1.toLocaleString('ja-JP')} + ${t2.toLocaleString('ja-JP')} = <b>${T.toLocaleString('ja-JP')}円</b>。<br>${X}万円 全部に 10% をかけると ${(X * 1000).toLocaleString('ja-JP')}円 になり、多すぎます。10% は こえた部分だけ です。<br><small>本当の計算は、きゅうりょうから いろいろな金額を ひいた残りに かけ、ほかの税もあります。ここは かんたんにした例です。</small>` },
+    ] };
+};
+GEN.t_year = () => {
+  const M = pick([5, 8, 10, 12, 15, 20]); const r = MONEY_FACTS.taxStd; const Y = M * 10000 * 12 * r / 100;
+  return { html: `ある家族は、1か月に 税ぬきで ${M}万円 の買い物をします (消費税はすべて ${r}% とします)。1年間に はらう消費税は <b class="box">□</b> 円`, text: `毎月税ぬき${M}万円 × 12か月 の ${r}% → □円`, slots: [slot(Y, '円')],
+    explain: () => [
+      { fig: figTapes([{ s: '1か月', segs: [{ w: 100, s: `${M}万円` }, { w: r * 2.2, s: `税`, cls: 'sh2' }] }, { s: '1年', segs: Array.from({ length: 12 }, (_, i) => ({ w: 100 / 12 * 1.1, s: '', cls: 'sh2' })), total: '12か月分の税' }], { label: '毎月の消費税を12か月あつめるテープ図' }),
+        text: `消費税は、買い物のたびに 少しずつ はらう税金です。1か月の消費税は ${(M * 10000).toLocaleString('ja-JP')} × ${r / 100} = ${(M * 10000 * r / 100).toLocaleString('ja-JP')}円。`, lesson: 'tax' },
+      { fig: ueq([['単位の式', `${mulChain([uq(M * 1000, '円', 1, 'か月'), uq(12, 'か月')])}${uop('=')}${uqHTML(uq(Y, '円'))}`, 'all']], 'か月 が 消える'),
+        text: `1年は 12か月 なので、${(M * 1000).toLocaleString('ja-JP')}円/か月 × 12か月 = <b>${Y.toLocaleString('ja-JP')}円</b>。<br>1回は 小さくても、1年分 あつめると 大きな金額です。日本中で あつまった消費税は、年金・医療・介護・子育てに 使われることになっています。` },
+    ] };
+};
 function moneyWhatFrames() {
   return [
     { fig: figTable(['持っている物', 'ほしい物'], [['さかな', 'パン'], ['パン', 'くつ'], ['くつ', 'さかな']]),
@@ -2322,6 +2389,26 @@ function orderWhyFrames() {
       text: '<b>まとめ</b><br>× ÷ は「同じ数のまとまり」を作ったり分けたりして、1つの数を作る計算。+ − は、できた数どうしを あわせたり とったりする計算。<br>だから、<b>まず まとまり (× ÷) を作り、それから あわせる・とる (+ −)</b>。かっこは、自分で「ここを先に」と決めた まとまりです。<br>この順番は、式の意味 (お話) を 1つに決めるための、みんなの約束です。' },
   ];
 }
+function taxFrames() {
+  return [
+    { fig: figFlow([{ s: 'みんな', sub: '家の人・会社' }, { s: '国・県・市', sub: 'あつめて\n使い道を決める', cls: 'sh3' }, { s: 'みんなのしごと', sub: '学校・道路\n消防・病院', cls: 'sh2' }], { arrows: ['税金', '使う'], back: '使い道は、選挙で選ばれた人が 話し合って決める', label: '税金の流れ' }),
+      text: '<b>税金ってなに？</b><br>学校・道路・消防のように、1人では 作れないけれど みんなに 必要なものがあります。そのお金を、みんなで 少しずつ 出しあうのが 税金です。<br>あつめたお金を 何に使うかは、選挙で選ばれた人 (国会議員・市議会議員など) が 話し合って決めます。' },
+    { fig: figTable(['税金で 動いているもの', 'たとえば'], [['公立の 小学校・中学校', '授業料は 無料。教科書も 国が 配る'], ['道路・信号・橋', 'だれでも 通れる'], ['消防・救急車', 'よんでも お金は かからない'], ['警察', 'まちの 安全を守る'], ['ごみの 収集・処理', 'まちを きれいにする'], ['図書館・公園', 'だれでも 使える']]),
+      text: '<b>身のまわりの 税金</b><br>毎日 通う学校も、税金で 動いています。先生の きゅうりょう、校舎、教科書などに 税金が 使われています。<br>「ただ (無料)」に見えるものも、本当は みんなが 出しあったお金で できています。' },
+    { fig: figTable(['税金', 'はらうとき', 'おさめる先'], [['消費税', '買い物をしたとき (10%、食べ物は 8%)', '国と 県・市'], ['所得税', 'はたらいて かせいだとき', '国'], ['住民税', 'その まちに 住んでいるとき', '県・市'], ['固定資産税', '土地や 家を 持っているとき', '市'], ['自動車税', '車を 持っているとき', '県']]),
+      text: '<b>いろいろな 税金</b><br>子どもも、おかしを買うとき 消費税を はらっています。大人は、かせいだとき (所得税)、住んでいるとき (住民税) などにも はらいます。<br><small>割合や しくみは このアプリを作った時点のもので、かわることがあります。</small>' },
+    { fig: figTapes([
+      { s: 'かせぎ 200万', segs: [{ w: 195, s: '5%' }, { w: 5, s: '', cls: 'sh2' }] },
+      { s: 'かせぎ 300万', segs: [{ w: 195, s: '5%' }, { w: 105, s: '10%', cls: 'sh2' }] },
+      { s: 'かせぎ 500万', segs: [{ w: 195, s: '5%' }, { w: 135, s: '10%', cls: 'sh2' }, { w: 170, s: '20%', cls: 'sh3' }] },
+    ], { label: '所得税の段のテープ図 (かんたんにした例)' }),
+      text: '<b>公平に 出しあう くふう</b><br>所得税は、かせぎを 段に分けて、上の段ほど 高い割合を かけます (5% から 45% まで)。かせぎが多い人ほど、多く はらうしくみです。<br>消費税は、だれが買っても 同じ割合です。だから、かせぎが 少ない人にとっては 重く感じやすい、という 意見もあります。<br><small>本当の計算は、きゅうりょうから いろいろな金額を ひいた残りに かけます。図は かんたんにした例です。</small>', },
+    { fig: figTapes([{ s: '国の予算', segs: [{ w: 33, s: '社会保障', cls: 'sh2' }, { w: 25, s: '借金の返済', cls: 'sh3' }, { w: 16, s: '地方へ', cls: 'sh' }, { w: 26, s: 'そのほか', cls: 'sh' }] }], { label: '国の予算の使い道 (おおよそ)' }) + figTable(['使い道', 'おおよその割合'], [['社会保障 (年金・医療・介護・子育て)', '約 3分の1'], ['国債 (前に かりたお金) の返済など', '約 4分の1'], ['地方 (県・市) へ わたす', '約 6分の1'], ['そのほか (道路・教育・防衛など)', 'のこり']]),
+      text: '<b>国の お金の 使い道 (おおよそ)</b><br>国の予算で いちばん大きいのは 社会保障 (年金・医療・介護・子育て) で、約3分の1。次に 大きいのは、前に かりたお金 (国債) を 返すための お金で、約4分の1。地方 (県や市) にも わたします。のこりで 道路・教育・防衛などを まかないます。<br>税金だけでは 足りず、国は 借金もしています。<br><small>割合は おおよそで、年によって かわります。</small>' },
+    { fig: ueq([['1人あたり', `${uqHTML(uq(600, '億円'))}${uop('÷')}${uqHTML(uq(20, '万人'))}${uop('=')}${uqHTML(uq(30, '万円', 1, '人'))}`, 'all']], '大きな数は 1人あたりに直す (例)'),
+      text: '<b>まとめ</b><br>・税金は、みんなで出しあって、みんなのために使う お金。<br>・何億円 という 大きな数は、1人あたりに 直すと 身近になる (億 ÷ 万 = 万)。<br>・使い道を 決める人は 選挙で選ぶ。18歳になると 選挙で 自分の考えを 伝えられます。<br>税金の 使われ方を 割合や 1人あたりで 考えられることが、算数の 大事な使い道です。' },
+  ];
+}
 const LESSONS = {
   order: { title: '計算の順番のわけ', frames: orderWhyFrames, stage: 'A4', btn: 'なぜこの順番？ くわしく見る' },
   unit: { title: '単位も計算する', frames: unitWhyFrames, stage: 'B5', btn: '単位の計算を くわしく見る' },
@@ -2329,6 +2416,7 @@ const LESSONS = {
   price: { title: 'ねだんは どう決まる？', frames: priceFrames, stage: 'C2', btn: 'ねだんの決まり方を くわしく見る' },
   currency: { title: '通貨と為替 (円高・円安)', frames: currencyFrames, stage: 'C3', btn: '通貨と為替を くわしく見る' },
   savings: { title: 'ためる・かりる (利息)', frames: savingsFrames, stage: 'C3', btn: '利息のしくみを くわしく見る' },
+  tax: { title: '税金ってなに？', frames: taxFrames, stage: 'C4', btn: '税金のしくみを見る' },
 };
 
 function makeProblem(type, level) {
@@ -2345,6 +2433,10 @@ function makeProblem(type, level) {
 if (typeof module !== 'undefined') module.exports = { Fr, GEN, makeProblem, LESSONS, STAGES, TRACKS, LEVEL_RAMP, levelTypes, judgeSlot, parseAnswer, addSubFrames, mulFrames, divFrames, exprSteps, gridHTML, setRnd: (f) => { rnd = f; } };
 // 改善の記録 (新しい順)。from には きっかけ (保護者の指示・送られたまとめの番号 FB-…) を書く
 const CHANGELOG = [
+  { v: '1.9', date: '2026-11-08', title: '税金のしくみ (お金とくらし C4)', from: ['保護者の指示 (11/8)'], items: [
+    '読みもの「税金ってなに？」(6枚): 税金の流れ、身のまわりの税金、いろいろな税金、公平に出しあうくふう (所得税の段)、国の予算の使い道、1人あたりに直す',
+    'C4 税金のしくみ: 使い道の割合、1人あたりの税金 (億 ÷ 万)、所得税の段の計算、1年の消費税',
+  ] },
   { v: '1.8.4', date: '2026-11-08', title: 'アプリのアイコン (算数ロボット)', from: ['保護者の指示 (11/8)'], items: [
     '娘さん用・保護者用で共通の 算数ロボットのアイコン (アンテナに ＋、耳に × と ÷)',
     '保護者ページのホーム画面の名前は「保護者ページ」',
